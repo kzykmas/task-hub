@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 機微情報は絶対に載せない（Vault secure/ 相当・接続情報）
+secure/
+connect/
+*sakura_ftp*
+*.htpasswd
+.env
+*.key
+*.pem
+
+# ローカル作業用
+_to_delete/
+*.tmp

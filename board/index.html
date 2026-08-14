@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>タスクボード（疎通確認）</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font-family: -apple-system, "Hiragino Sans", sans-serif;
+         margin: 0; padding: 2rem 1.25rem; line-height: 1.7; }
+  .wrap { max-width: 34rem; margin: 0 auto; }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; }
+  .stamp { font-size: .8rem; opacity: .65; margin-bottom: 1.5rem; }
+  .ok { display: inline-block; padding: .5rem .9rem; border-radius: .5rem;
+        background: #1f7a4d; color: #fff; font-weight: 600; }
+  ul { padding-left: 1.2rem; }
+  li { margin: .35rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>タスクボード</h1>
+  <p class="stamp">生成：2026/08/14（疎通確認用ダミー）</p>
+
+  <p><span class="ok">配信の疎通 OK</span></p>
+
+  <p>このページが iPhone で（Basic認証を通して）表示されていれば、
+     次の経路が最後までつながっています。</p>
+
+  <ul>
+    <li>Cowork／Routines がボードを生成して GitHub へ push</li>
+    <li>GitHub Actions が FTPS で さくらの <code>taskboard/</code> へ転送</li>
+    <li>さくら（共有SSL・Basic認証）が配信</li>
+  </ul>
+
+  <p>本番のボードは <code>scripts/gen_dashboard.py</code> が
+     <code>board/index.html</code> を上書きして生成します（AIW-007 P2-5）。</p>
+</div>
+</body>
+</html>

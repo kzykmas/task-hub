@@ -1,0 +1,76 @@
+# .github/workflows/deploy-sakura.yml
+#
+# task-hub リポへの push をトリガーに、生成済みのタスクボード（HTML）を
+# さくらインターネットの taskboard/ へ FTPS でアップロードする。
+#
+# 背景（AIW-007 方針書v2 参照）：
+#   Cowork／クラウドRoutines／Macブリッジのいずれの実行環境も
+#   HTTPS(443)以外の外向き通信ができず、AIが直接FTP/FTPSでアップロードできない。
+#   そのため実際のアップロードは GitHub Actions（ネットワーク制限なし）に担当させる。
+#
+# 事前準備（登録済み・2026/08/14）：
+#   Settings → Secrets and variables → Actions → Repository secrets
+#     SAKURA_FTP_HOST      … 例）xxxx.sakura.ne.jp
+#     SAKURA_FTP_USER      … サーバーID
+#     SAKURA_FTP_PASSWORD  … サーバーパスワード
+#
+# 事故防止：アップロード先パス taskboard/ をこのファイルに固定でハードコードし、
+#           他のパスへは絶対にアップロードしない（引数化・変数化しない）。
+#
+# 出力パスの確定（2026/08/14）：ボード生成物は board/index.html に出力する。
+#   gen_dashboard.py を scripts/ へ移設する際（P2-5）もこのパスに合わせる。
+
+name: Deploy Sakura Taskboard
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'board/**'
+      - '.github/workflows/deploy-sakura.yml'
+  workflow_dispatch: {}       # 手動実行・疎通確認用
+
+concurrency:
+  group: deploy-sakura
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload taskboard to Sakura via FTPS
+        env:
+          SAKURA_FTP_HOST: ${{ secrets.SAKURA_FTP_HOST }}
+          SAKURA_FTP_USER: ${{ secrets.SAKURA_FTP_USER }}
+          SAKURA_FTP_PASSWORD: ${{ secrets.SAKURA_FTP_PASSWORD }}
+          BOARD_HTML_PATH: board/index.html
+          BOARD_MD_PATH: board/taskboard.md
+          UPLOAD_DIR: taskboard               # 固定。変更しない
+        run: |
+          set -euo pipefail
+          if [ -z "${SAKURA_FTP_HOST}" ] || [ -z "${SAKURA_FTP_USER}" ] || [ -z "${SAKURA_FTP_PASSWORD}" ]; then
+            echo "::error::Secrets(SAKURA_FTP_HOST/USER/PASSWORD)が未設定です。リポのSettings→Secretsを確認してください。"
+            exit 1
+          fi
+          if [ ! -f "${BOARD_HTML_PATH}" ]; then
+            echo "::error::ボードHTMLが見つかりません: ${BOARD_HTML_PATH}"
+            exit 1
+          fi
+
+          upload () {
+            local src="$1" dst="$2"
+            curl --ssl-reqd --fail --silent --show-error \
+                 --user "${SAKURA_FTP_USER}:${SAKURA_FTP_PASSWORD}" \
+                 -T "${src}" \
+                 "ftp://${SAKURA_FTP_HOST}/${UPLOAD_DIR}/${dst}"
+            echo "アップロード完了: ${UPLOAD_DIR}/${dst}"
+          }
+
+          upload "${BOARD_HTML_PATH}" "index.html"
+
+          if [ -f "${BOARD_MD_PATH}" ]; then
+            upload "${BOARD_MD_PATH}" "taskboard.md"
+          fi
