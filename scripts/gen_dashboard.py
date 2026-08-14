@@ -113,6 +113,14 @@ def main(root, today_s, out_path, fixed_path=None):
                      and (t.get("due") == today_s or is_urgent_today(t))],
                     key=lambda t: (t.get("size") == "light", t.get("id")))
 
+    # ---- 今日やるつもり（2026/08/15 新設）----
+    # today: yyyy/mm/dd → その日に着手するつもりのもの。「至急（やらねばならない）」とは別の、
+    # 増野さん自身の意思の枠。日付で持つので、翌日には自動で外れる（外し忘れが残らない）。
+    # 至急と重複しても両方に出す：この節だけ見れば今日の作業が全部わかる状態を優先する。
+    today_plan = sorted([t for t in tasks if t.get("status") not in ("done", "dropped")
+                         and t.get("today") == today_s],
+                        key=lambda t: (t.get("due") or "9999/99/99", t.get("id")))
+
     # ---- 2週間ある（今日起点14日）: ★付き予定 + timeboundタスク ----
     days = [today + datetime.timedelta(days=i) for i in range(14)]
     by_day = {dd.strftime("%Y/%m/%d"): [] for dd in days}
@@ -196,8 +204,10 @@ def main(root, today_s, out_path, fixed_path=None):
         mark = '<span class="sub-mark">↳</span>' if child else ""
         cls = ' class="child"' if child else ""
         ph = '<span class="phys" title="肉体作業">💪</span>' if t.get("labor") == "physical" else ""
+        # 仕掛かり中（status: doing）は節を作らず、行の左のマークで示す（2026/08/15 増野さん決定）
+        wip = '<span class="wip" title="仕掛かり中">🚧</span>' if t.get("status") == "doing" else ""
         pref = parentref(t) if show_parent else ""
-        out = (f'<li{cls}>{mark}{org}<span class="tid">{esc(no)}</span>{ph} {esc(t.get("title", ""))}{pref} '
+        out = (f'<li{cls}>{mark}{org}<span class="tid">{esc(no)}</span>{wip}{ph} {esc(t.get("title", ""))}{pref} '
                f'{duetag(t)}{chip(t)}</li>')
         if not child and expand:
             for c in sorted(children.get(t["id"], []), key=lambda x: x.get("due", "")):
@@ -405,6 +415,7 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
 .warn {{ background:#d6303118; border:1px solid #d63031; border-radius:8px; padding:8px 12px;
   font-size:13px; margin:8px 0; }}
 .urgentbox {{ background:#d6303114; border:2px solid #d63031; border-radius:10px; padding:6px 14px; }}
+.todaybox {{ background:#0984e314; border:2px solid #0984e3; border-radius:10px; padding:6px 14px; }}
 .hidden-note {{ color:var(--text-secondary); font-size:11px; margin:8px 0 0; font-style:italic; }}
 .daystrip {{ display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; margin-bottom:5px; }}
 .day {{ background:var(--surface-2); border-radius:8px; padding:6px 7px; min-height:56px; font-size:11px; }}
@@ -450,6 +461,11 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
 
 {('<h2>🚨 至急 — 今日やる</h2><div class="urgentbox"><ul>'
   + "".join(row(t, True, expand=False) for t in urgent) + '</ul></div>') if urgent else ''}
+
+{h2(f'🎯 今日やるつもり — {len(today_plan)}件',
+    'タスクノートに today: 今日の日付 を書いたもの。「至急（やらねばならない）」とは別の、'
+    '自分で決めた今日の枠。🚧は仕掛かり中（status: doing）。翌日には自動で外れる。')}
+{'<div class="todaybox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in today_plan) + '</ul></div>' if today_plan else '<p class="note">今日やるつもりのタスクは登録されていません。</p>'}
 
 {h2(f'⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）',
     '1時間以上の検討・調整・検証。タスクノートの size: light が無印のもの。拘束（timebound）は「2週間ある」で見る。')}

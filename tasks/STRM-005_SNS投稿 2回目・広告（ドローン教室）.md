@@ -5,6 +5,7 @@ title: SNS投稿 2回目・広告（ドローン教室）
 short: SNS投稿 2回目（広告）
 status: todo
 role: do
+today: 2026/08/15
 due: 
 reason: 
 later: 

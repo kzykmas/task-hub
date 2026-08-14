@@ -7,6 +7,7 @@ status: todo
 size: light
 labor: physical
 role: do
+today: 2026/08/15
 due: 2026/08/28
 reason: 
 later: 

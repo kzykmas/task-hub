@@ -88,6 +88,11 @@ def main(root, today_s, out_path, fixed_path=None):
                      and (t.get("due") == today_s or is_urgent_today(t))],
                     key=lambda t: (t.get("size") == "light", t.get("id")))
 
+    # 今日やるつもり（2026/08/15 新設）。至急と重複しても両方に出す
+    today_plan = sorted([t for t in tasks if t.get("status") not in ("done", "dropped")
+                         and t.get("today") == today_s],
+                        key=lambda t: (t.get("due") or "9999/99/99", t.get("id")))
+
     days = [today + datetime.timedelta(days=i) for i in range(14)]
     by_day = {dd.strftime("%Y/%m/%d"): [] for dd in days}
     for e in fixed:
@@ -140,6 +145,9 @@ def main(root, today_s, out_path, fixed_path=None):
         return f"{mk}{back}{t['due'][5:]}"
     def phys(t):
         return "💪" if t.get("labor") == "physical" else ""
+    def wip(t):
+        # 仕掛かり中（status: doing）は節を作らずマークで示す（2026/08/15 増野さん決定）
+        return "🚧" if t.get("status") == "doing" else ""
     def pref(t):
         par = idx.get(t.get("parent", ""))
         if not par: return ""
@@ -148,7 +156,7 @@ def main(root, today_s, out_path, fixed_path=None):
         return f" ⟵{par.get('src_no') or par['id']} {name}"
     def line(t, parent=False):
         no = t.get("src_no") or t["id"]
-        bits = [f"- **{no}**{phys(t)} {t.get('title','')}"]
+        bits = [f"- **{no}**{wip(t)}{phys(t)} {t.get('title','')}"]
         dm = duemark(t)
         if dm: bits.append(dm)
         if t.get("owner"): bits.append(f"（{t['owner']}）")
@@ -165,6 +173,13 @@ def main(root, today_s, out_path, fixed_path=None):
         L.append("## 🚨 至急 — 今日やる")
         for t in urgent: L.append(line(t))
         L.append("")
+
+    L.append(f"## 🎯 今日やるつもり {len(today_plan)}件")
+    if today_plan:
+        for t in today_plan: L.append(line(t, parent=True))
+    else:
+        L.append("登録なし")
+    L.append("")
 
     L.append(f"## ⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）")
     if len(tw_heavy) > THIS_WEEK_LIMIT:

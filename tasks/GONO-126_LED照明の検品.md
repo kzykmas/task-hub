@@ -7,6 +7,7 @@ status: this_week
 size: light
 labor: physical
 role: do
+today: 2026/08/15
 due: 2026/08/21
 reason: 
 later: 

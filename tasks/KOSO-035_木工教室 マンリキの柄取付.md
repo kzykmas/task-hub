@@ -6,6 +6,7 @@ short: マンリキの柄取付
 status: doing
 labor: physical
 role: do
+today: 2026/08/15
 due: 2026/08/17
 reason: 
 later: 
