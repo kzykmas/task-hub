@@ -8,17 +8,13 @@
 #   HTTPS(443)以外の外向き通信ができず、AIが直接FTP/FTPSでアップロードできない。
 #   そのため実際のアップロードは GitHub Actions（ネットワーク制限なし）に担当させる。
 #
-# 事前準備（登録済み・2026/08/14）：
-#   Settings → Secrets and variables → Actions → Repository secrets
-#     SAKURA_FTP_HOST      … 例）xxxx.sakura.ne.jp
-#     SAKURA_FTP_USER      … サーバーID
-#     SAKURA_FTP_PASSWORD  … サーバーパスワード
-#
-# 事故防止：アップロード先パス taskboard/ をこのファイルに固定でハードコードし、
+# 事故防止：アップロード先パスをこのファイルに固定でハードコードし、
 #           他のパスへは絶対にアップロードしない（引数化・変数化しない）。
 #
-# 出力パスの確定（2026/08/14）：ボード生成物は board/index.html に出力する。
-#   gen_dashboard.py を scripts/ へ移設する際（P2-5）もこのパスに合わせる。
+# 2026/08/14 改訂：初回実行が curl exit 56（受信エラー）で失敗したため
+#   - EPSV を無効化（--disable-epsv）。ファイアウォール環境での定番の原因。
+#   - 接続先ディレクトリ構造を確認する診断ステップを追加。
+#   - 失敗時に詳細ログが残るよう -v を付与（Secretsは自動マスクされる）。
 
 name: Deploy Sakura Taskboard
 
@@ -41,6 +37,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 診断：FTPSでログインしてルート直下を一覧
+        env:
+          SAKURA_FTP_HOST: ${{ secrets.SAKURA_FTP_HOST }}
+          SAKURA_FTP_USER: ${{ secrets.SAKURA_FTP_USER }}
+          SAKURA_FTP_PASSWORD: ${{ secrets.SAKURA_FTP_PASSWORD }}
+        run: |
+          set -uo pipefail
+          if [ -z "${SAKURA_FTP_HOST}" ] || [ -z "${SAKURA_FTP_USER}" ] || [ -z "${SAKURA_FTP_PASSWORD}" ]; then
+            echo "::error::Secrets(SAKURA_FTP_HOST/USER/PASSWORD)が未設定です。"
+            exit 1
+          fi
+          echo "===== ログイン直後のカレントディレクトリの中身 ====="
+          curl -v --ssl-reqd --disable-epsv \
+               --user "${SAKURA_FTP_USER}:${SAKURA_FTP_PASSWORD}" \
+               "ftp://${SAKURA_FTP_HOST}/" 2>&1 | tail -60
+          echo "終了コード: $?（0以外でもここでは止めない）"
+
       - name: Upload taskboard to Sakura via FTPS
         env:
           SAKURA_FTP_HOST: ${{ secrets.SAKURA_FTP_HOST }}
@@ -48,13 +61,9 @@ jobs:
           SAKURA_FTP_PASSWORD: ${{ secrets.SAKURA_FTP_PASSWORD }}
           BOARD_HTML_PATH: board/index.html
           BOARD_MD_PATH: board/taskboard.md
-          UPLOAD_DIR: taskboard               # 固定。変更しない
+          UPLOAD_DIR: www/taskboard          # 固定。変更しない
         run: |
           set -euo pipefail
-          if [ -z "${SAKURA_FTP_HOST}" ] || [ -z "${SAKURA_FTP_USER}" ] || [ -z "${SAKURA_FTP_PASSWORD}" ]; then
-            echo "::error::Secrets(SAKURA_FTP_HOST/USER/PASSWORD)が未設定です。リポのSettings→Secretsを確認してください。"
-            exit 1
-          fi
           if [ ! -f "${BOARD_HTML_PATH}" ]; then
             echo "::error::ボードHTMLが見つかりません: ${BOARD_HTML_PATH}"
             exit 1
@@ -62,7 +71,7 @@ jobs:
 
           upload () {
             local src="$1" dst="$2"
-            curl --ssl-reqd --fail --silent --show-error \
+            curl -v --ssl-reqd --disable-epsv --fail --show-error \
                  --user "${SAKURA_FTP_USER}:${SAKURA_FTP_PASSWORD}" \
                  -T "${src}" \
                  "ftp://${SAKURA_FTP_HOST}/${UPLOAD_DIR}/${dst}"
