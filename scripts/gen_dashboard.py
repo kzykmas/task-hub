@@ -204,8 +204,10 @@ def main(root, today_s, out_path, fixed_path=None):
         mark = '<span class="sub-mark">↳</span>' if child else ""
         cls = ' class="child"' if child else ""
         ph = '<span class="phys" title="肉体作業">💪</span>' if t.get("labor") == "physical" else ""
-        # 仕掛かり中（status: doing）は節を作らず、行の左のマークで示す（2026/08/15 増野さん決定）
-        wip = '<span class="wip" title="仕掛かり中">🚧</span>' if t.get("status") == "doing" else ""
+        # 仕掛かり中（doing）と事前調査（research）は節を作らず、行の左のマークで示す
+        # （2026/08/15 増野さん決定。research＝仕掛かる前の壁打ち・整理の段階。進捗の水増しを避ける）
+        wip = ('<span class="wip" title="仕掛かり中">🚧</span>' if t.get("status") == "doing" else
+               '<span class="wip" title="事前調査">🔍</span>' if t.get("status") == "research" else "")
         pref = parentref(t) if show_parent else ""
         out = (f'<li{cls}>{mark}{org}<span class="tid">{esc(no)}</span>{wip}{ph} {esc(t.get("title", ""))}{pref} '
                f'{duetag(t)}{chip(t)}</li>')

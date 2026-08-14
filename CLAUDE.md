@@ -24,9 +24,10 @@
 
 ## 必ず守ること
 
-- **`status` は `todo` `this_week` `doing` `waiting` `done` `dropped` の6語のみ。**
+- **`status` は `todo` `this_week` `doing` `research` `waiting` `done` `dropped` の7語のみ。**
   `waiting`＝相手の作業・納品待ち（期限アラートに出さず `👥 待ち` 節へ）。
   `doing`＝仕掛かり中で、行の左に 🚧 が付く（節は作らない）。
+  `research`＝事前調査（仕掛かる前の壁打ち・整理）で 🔍。**着手を進捗に水増ししないため `doing` と分ける**。
   「これから1週間でやる」に出るのは `this_week` だけ
 - **「今日やるつもり」は `today: <今日の日付>`。** 増野さんが「今日やる」と言ったタスクに付ける。
   `🎯 今日やるつもり` 節に出る。`urgent`（やらねばならない）とは別の、自分で決めた枠

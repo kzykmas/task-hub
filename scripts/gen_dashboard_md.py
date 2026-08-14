@@ -146,8 +146,8 @@ def main(root, today_s, out_path, fixed_path=None):
     def phys(t):
         return "💪" if t.get("labor") == "physical" else ""
     def wip(t):
-        # 仕掛かり中（status: doing）は節を作らずマークで示す（2026/08/15 増野さん決定）
-        return "🚧" if t.get("status") == "doing" else ""
+        # 仕掛かり中（doing）と事前調査（research）は節を作らずマークで示す（2026/08/15 増野さん決定）
+        return "🚧" if t.get("status") == "doing" else "🔍" if t.get("status") == "research" else ""
     def pref(t):
         par = idx.get(t.get("parent", ""))
         if not par: return ""

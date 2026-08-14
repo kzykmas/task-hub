@@ -2,7 +2,7 @@
 id: AIW-001
 org: AI改善
 title: 外部AI呼び出しテスト（Codex・Geminiサブエージェント）
-status: doing
+status: research
 role: do
 due: 
 reason: 
@@ -30,3 +30,6 @@ CoworkのセッションからCodex・Geminiをサブエージェントとして
   **結論（Cowork側）: 不可。外部AIサブエージェントはMBA2020のClaude Code前提。**
   残検証: Claude Code側で codex exec / gemini -p のヘッドレス呼び出しとAPIキー受け渡し
   → 詳細は [[20260807_監査体制設計_チェックと検証の役割_01_draft]] 第0章（04_log/）
+- 2026/08/15 増野さん整理により **status: doing → research（事前調査）**。
+  外部AI呼び出しの可否は Cowork 側で結論が出ており、残りは Claude Code 側の検証。
+  仕掛かり中ではなく、仕掛かる前の壁打ち・整理の段階であるため（🔍マークが付く）。
