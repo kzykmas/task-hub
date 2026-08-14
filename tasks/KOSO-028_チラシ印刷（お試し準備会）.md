@@ -3,7 +3,7 @@ id: KOSO-028
 org: 構想P
 title: チラシ印刷（お試し準備会）
 short: チラシ印刷
-status: this_week
+status: waiting
 role: do
 due: 2026/08/14
 reason: 
@@ -18,3 +18,5 @@ done_date:
 ## 経緯
 - 2026/08/13 増野さん指示。明日8/14（金）に印刷発注を予定。due を8/14に確定
   （parentのKOSO-001 8/20・lead 6dの逆算ともほぼ一致）。
+- 2026/08/14 **印刷を発注済み。納品予定は8/17。** 納品確認まで status: waiting。
+  → 納品後は KOSO-029（チラシ配布・掲示 8/17）へ引き継ぐ。
