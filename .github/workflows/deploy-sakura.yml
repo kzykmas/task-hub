@@ -1,7 +1,7 @@
 # .github/workflows/deploy-sakura.yml
 #
 # task-hub リポへの push をトリガーに、生成済みのタスクボード（HTML）を
-# さくらインターネットの taskboard/ へ FTPS でアップロードする。
+# さくらインターネットの www/taskboard/ へ FTPS でアップロードする。
 #
 # 背景（AIW-007 方針書v2 参照）：
 #   Cowork／クラウドRoutines／Macブリッジのいずれの実行環境も
@@ -11,10 +11,12 @@
 # 事故防止：アップロード先パスをこのファイルに固定でハードコードし、
 #           他のパスへは絶対にアップロードしない（引数化・変数化しない）。
 #
-# 2026/08/14 改訂：初回実行が curl exit 56（受信エラー）で失敗したため
-#   - EPSV を無効化（--disable-epsv）。ファイアウォール環境での定番の原因。
-#   - 接続先ディレクトリ構造を確認する診断ステップを追加。
-#   - 失敗時に詳細ログが残るよう -v を付与（Secretsは自動マスクされる）。
+# 2026/08/14 の調査で確定したこと（Macからの curl -v で実測）：
+#   - ログイン地点は /home/<アカウント>。その直下に www がある
+#     → アップロード先は www/taskboard（当初の taskboard は1階層足りなかった）
+#   - EPSV は正常に通る → --disable-epsv は不要（初回の推測は誤りだった）
+#   - さくら側のFTPSは正常。Actionsからのみ PASS 直後に切断される
+#     → さくらの「国外IPアドレスフィルタ」が本命。Secrets値の混入も候補
 
 name: Deploy Sakura Taskboard
 
@@ -37,6 +39,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: 診断：Secretsの形（長さ・空白混入）を確認
+        env:
+          SAKURA_FTP_HOST: ${{ secrets.SAKURA_FTP_HOST }}
+          SAKURA_FTP_USER: ${{ secrets.SAKURA_FTP_USER }}
+          SAKURA_FTP_PASSWORD: ${{ secrets.SAKURA_FTP_PASSWORD }}
+        run: |
+          set -uo pipefail
+          # 値そのものは出さない。長さと、前後空白・改行の有無だけを出す。
+          for name in SAKURA_FTP_HOST SAKURA_FTP_USER SAKURA_FTP_PASSWORD; do
+            v="${!name}"
+            if [ -z "${v}" ]; then echo "${name}: 未設定"; continue; fi
+            trimmed="$(printf '%s' "${v}" | tr -d '[:space:]')"
+            echo "${name}: 文字数=${#v} 空白除去後=${#trimmed} $([ "${#v}" -ne "${#trimmed}" ] && echo '⚠ 空白/改行が混入している')"
+          done
+
       - name: 診断：FTPSでログインしてルート直下を一覧
         env:
           SAKURA_FTP_HOST: ${{ secrets.SAKURA_FTP_HOST }}
@@ -44,15 +61,10 @@ jobs:
           SAKURA_FTP_PASSWORD: ${{ secrets.SAKURA_FTP_PASSWORD }}
         run: |
           set -uo pipefail
-          if [ -z "${SAKURA_FTP_HOST}" ] || [ -z "${SAKURA_FTP_USER}" ] || [ -z "${SAKURA_FTP_PASSWORD}" ]; then
-            echo "::error::Secrets(SAKURA_FTP_HOST/USER/PASSWORD)が未設定です。"
-            exit 1
-          fi
           echo "===== ログイン直後のカレントディレクトリの中身 ====="
-          curl -v --ssl-reqd --disable-epsv \
+          curl -v --ssl-reqd \
                --user "${SAKURA_FTP_USER}:${SAKURA_FTP_PASSWORD}" \
-               "ftp://${SAKURA_FTP_HOST}/" 2>&1 | tail -60
-          echo "終了コード: $?（0以外でもここでは止めない）"
+               "ftp://${SAKURA_FTP_HOST}/" 2>&1 | tail -40 || true
 
       - name: Upload taskboard to Sakura via FTPS
         env:
@@ -71,7 +83,7 @@ jobs:
 
           upload () {
             local src="$1" dst="$2"
-            curl -v --ssl-reqd --disable-epsv --fail --show-error \
+            curl --ssl-reqd --fail --silent --show-error \
                  --user "${SAKURA_FTP_USER}:${SAKURA_FTP_PASSWORD}" \
                  -T "${src}" \
                  "ftp://${SAKURA_FTP_HOST}/${UPLOAD_DIR}/${dst}"
