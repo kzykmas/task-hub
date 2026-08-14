@@ -362,6 +362,29 @@ def main(root, today_s, out_path, fixed_path=None):
         items = "、".join(esc((t.get("src_no") or t["id"]) + " " + t["title"] + f"（〜{t.get('due','')}）") for t in undated)
         undated_note = f'<p class="note">日付未定の拘束（枠だけ確保）: {items}</p>'
 
+    # ---- 重複排除（2026/08/15 増野さん決定）----
+    # 1つのタスクは「至急」から「監視の期日」までのうち、上から最初に該当した1節にだけ出す。
+    # 同じタスクが上部に何度も現れると、今日やる量が実際より多く見えるため。
+    # 対象外：「2週間ある」（カレンダー＝事実の枠。日付が抜けると誤読される）と、
+    #         「タイムライン」「団体別ボード」（全体を俯瞰する場所なので重複してよい）。
+    shown_ids = set()
+    def uniq(lst):
+        out = []
+        for t in lst:
+            if t["id"] in shown_ids: continue
+            shown_ids.add(t["id"]); out.append(t)
+        return out
+    def omitted(shown, total):
+        n = len(total) - len(shown)
+        return f'<span class="note">（＋上の節に{n}件）</span>' if n else ""
+    v_urgent   = uniq(urgent)
+    v_today    = uniq(today_plan)
+    v_tw_heavy = uniq(tw_heavy)
+    v_tw_light = uniq(tw_light)
+    v_alerts   = {k: uniq(alerts[k]) for k in ("overdue", "d3", "d14")}
+    v_waiting  = uniq(waiting_list)
+    v_mon_due  = uniq(mon_due)
+
     page = f"""<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>マルチプロジェクト タスクボード</title>
@@ -462,35 +485,36 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
 </div>
 
 {('<h2>🚨 至急 — 今日やる</h2><div class="urgentbox"><ul>'
-  + "".join(row(t, True, expand=False) for t in urgent) + '</ul></div>') if urgent else ''}
+  + "".join(row(t, True, expand=False) for t in v_urgent) + '</ul></div>') if v_urgent else ''}
 
-{h2(f'🎯 今日やるつもり — {len(today_plan)}件',
+{h2(f'🎯 今日やるつもり — {len(v_today)}件', 
     'タスクノートに today: 今日の日付 を書いたもの。「至急（やらねばならない）」とは別の、'
-    '自分で決めた今日の枠。🚧は仕掛かり中（status: doing）。翌日には自動で外れる。')}
-{'<div class="todaybox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in today_plan) + '</ul></div>' if today_plan else '<p class="note">今日やるつもりのタスクは登録されていません。</p>'}
+    '自分で決めた今日の枠。🚧は仕掛かり中（status: doing）。翌日には自動で外れる。'
+    '至急に出したものはここには出さない。') + omitted(v_today, today_plan)}
+{'<div class="todaybox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_today) + '</ul></div>' if v_today else '<p class="note">上の節に出していない、今日やるつもりのタスクはありません。</p>'}
 
 {h2(f'⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）',
     '1時間以上の検討・調整・検証。タスクノートの size: light が無印のもの。拘束（timebound）は「2週間ある」で見る。')}
 {f'<div class="warn">重タスクが{THIS_WEEK_LIMIT}枚制限を超えています。減らしてください。</div>' if over_limit else ''}
 {"".join(f'<div class="warn">⚠ 逆算期日が過ぎています: {esc(t["id"])} {esc(t["title"])}（期日{t["due"]}）。親の日付を動かすか、準備を削るかを決めてください。</div>' for t in lead_broken)}
-<ul>{"".join(row(t, True, show_parent=True) for t in tw_heavy)}</ul>
+<ul>{"".join(row(t, True, show_parent=True) for t in v_tw_heavy)}</ul>{omitted(v_tw_heavy, tw_heavy)}
 
 {h2(f'🔹 これから1週間でやる — 軽（{len(tw_light)}/{LIGHT_LIMIT}）',
     '1時間未満の発注・連絡など。タスクノートに size: light を書いたもの。')}
 {f'<div class="warn">軽タスクが{LIGHT_LIMIT}件の目安を超えています。すき間時間で消化するか、先送りを検討。</div>' if over_light else ''}
-<ul>{"".join(row(t, True, show_parent=True) for t in tw_light)}</ul>
+<ul>{"".join(row(t, True, show_parent=True) for t in v_tw_light)}</ul>{omitted(v_tw_light, tw_light)}
 
 {h2('⏰ 期限アラート', '期限切れ／3日以内／14日以内。拘束タスクは「2週間ある」で見るので除外。')}
-{'<p class="sub">期限切れ</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["overdue"]) + '</ul>' if alerts["overdue"] else ''}
-{'<p class="sub">3日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["d3"]) + '</ul>' if alerts["d3"] else ''}
-{'<p class="sub">14日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["d14"]) + '</ul>' if alerts["d14"] else ''}
+{'<p class="sub">期限切れ</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["overdue"]) + '</ul>' if v_alerts["overdue"] else ''}
+{'<p class="sub">3日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["d3"]) + '</ul>' if v_alerts["d3"] else ''}
+{'<p class="sub">14日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["d14"]) + '</ul>' if v_alerts["d14"] else ''}
 
-{h2(f'👥 待ち（相手の作業・納品）— {len(waiting_list)}件',
-    '自分では動かせないタスク。期限アラートには出さないが、放置しないためここに集める。期日は目安。')}
-{'<ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in waiting_list) + '</ul>' if waiting_list else '<p class="note">待ちのタスクはありません。</p>'}
+{h2(f'👥 待ち（相手の作業・納品）— {len(v_waiting)}件',
+    '自分では動かせないタスク。期限アラートには出さないが、放置しないためここに集める。期日は目安。') + omitted(v_waiting, waiting_list)}
+{'<ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_waiting) + '</ul>' if v_waiting else '<p class="note">待ちのタスクはありません。</p>'}
 
 {h2('👀 監視の期日', '担当が他の人（role: monitor）で、next_check が7日以内に来たもの。確認したら next_check を先送りする。')}
-{'<ul>' + "".join(row(t, True) for t in mon_due) + '</ul>' if mon_due else '<p class="note">今週の見回りはありません。</p>'}
+{'<ul>' + "".join(row(t, True) for t in v_mon_due) + '</ul>' if v_mon_due else '<p class="note">今週の見回りはありません。</p>'}
 
 {h2('📐 タイムライン',
     f'{TIMELINE_DAYS}日以内で細目タスクを持つ企画・手続き。◆＝拘束（開催日等）、バー＝今日から期日までの残り走路。'

@@ -93,6 +93,19 @@ def main(root, today_s, out_path, fixed_path=None):
                          and t.get("today") == today_s],
                         key=lambda t: (t.get("due") or "9999/99/99", t.get("id")))
 
+    # 重複排除（2026/08/15 増野さん決定）：1つのタスクは「至急」〜「監視の期日」のうち
+    # 上から最初に該当した1節にだけ出す。「2週間ある」はカレンダーなので対象外。
+    shown_ids = set()
+    def uniq(lst):
+        out = []
+        for t in lst:
+            if t["id"] in shown_ids: continue
+            shown_ids.add(t["id"]); out.append(t)
+        return out
+    def plus(shown, total):
+        n = len(total) - len(shown)
+        return f"（＋上の節に{n}件）" if n else ""
+
     days = [today + datetime.timedelta(days=i) for i in range(14)]
     by_day = {dd.strftime("%Y/%m/%d"): [] for dd in days}
     for e in fixed:
@@ -169,14 +182,22 @@ def main(root, today_s, out_path, fixed_path=None):
     L.append(f"生成: {today_s} {now}（スナップショット）")
     L.append("")
 
-    if urgent:
+    v_urgent   = uniq(urgent)
+    v_today    = uniq(today_plan)
+    v_tw_heavy = uniq(tw_heavy)
+    v_tw_light = uniq(tw_light)
+    v_alerts   = {k: uniq(alerts[k]) for k in ("overdue", "d3", "d14")}
+    v_waiting  = uniq(waiting_list)
+    v_mon_due  = uniq(mon_due)
+
+    if v_urgent:
         L.append("## 🚨 至急 — 今日やる")
-        for t in urgent: L.append(line(t))
+        for t in v_urgent: L.append(line(t))
         L.append("")
 
-    L.append(f"## 🎯 今日やるつもり {len(today_plan)}件")
-    if today_plan:
-        for t in today_plan: L.append(line(t, parent=True))
+    L.append(f"## 🎯 今日やるつもり {len(v_today)}件{plus(v_today, today_plan)}")
+    if v_today:
+        for t in v_today: L.append(line(t, parent=True))
     else:
         L.append("登録なし")
     L.append("")
@@ -186,11 +207,13 @@ def main(root, today_s, out_path, fixed_path=None):
         L.append(f"⚠️ **重タスクが{THIS_WEEK_LIMIT}枚制限を超過。減らすこと。**")
     for t in lead_broken:
         L.append(f"⚠️ 逆算期日切れ: {t['id']} {t.get('title','')}（期日{t['due']}）")
-    for t in tw_heavy: L.append(line(t, parent=True))
+    for t in v_tw_heavy: L.append(line(t, parent=True))
+    if len(v_tw_heavy) < len(tw_heavy): L.append(plus(v_tw_heavy, tw_heavy))
     L.append("")
 
     L.append(f"## 🔹 軽タスク（{len(tw_light)}/{LIGHT_LIMIT}）")
-    for t in tw_light: L.append(line(t, parent=True))
+    for t in v_tw_light: L.append(line(t, parent=True))
+    if len(v_tw_light) < len(tw_light): L.append(plus(v_tw_light, tw_light))
     L.append("")
 
     L.append(f"## 📊 負荷: 重{len(tw_heavy)}＋軽{len(tw_light)}＝{load_score:g}／7 **{load_level}** 💪{len(tw_phys)}件")
@@ -208,23 +231,23 @@ def main(root, today_s, out_path, fixed_path=None):
 
     L.append("## ⏰ 期限アラート")
     for key, lab in (("overdue", "期限切れ"), ("d3", "3日以内"), ("d14", "14日以内")):
-        if alerts[key]:
+        if v_alerts[key]:
             L.append(f"**{lab}**")
-            for t in alerts[key]: L.append(line(t, parent=True))
-    if not any(alerts.values()):
+            for t in v_alerts[key]: L.append(line(t, parent=True))
+    if not any(v_alerts.values()):
         L.append("なし")
     L.append("")
 
-    L.append(f"## 👥 待ち（相手の作業・納品）{len(waiting_list)}件")
-    if waiting_list:
-        for t in waiting_list: L.append(line(t, parent=True))
+    L.append(f"## 👥 待ち（相手の作業・納品）{len(v_waiting)}件{plus(v_waiting, waiting_list)}")
+    if v_waiting:
+        for t in v_waiting: L.append(line(t, parent=True))
     else:
         L.append("なし")
     L.append("")
 
     L.append("## 👀 監視の期日")
-    if mon_due:
-        for t in mon_due:
+    if v_mon_due:
+        for t in v_mon_due:
             L.append(f"- **{t.get('src_no') or t['id']}** {t.get('title','')} 確認→{t.get('next_check','')[5:]}")
     else:
         L.append("今週の見回りはありません。")
