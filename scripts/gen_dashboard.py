@@ -129,7 +129,9 @@ def main(root, today_s, out_path, fixed_path=None):
     # ---- 期限アラート ----
     def bucket(t):
         dd = d(t.get("due", ""))
-        if not dd or t.get("status") == "done": return None
+        # waiting（相手の作業・納品待ち）はアラートから外す。自分が動けないタスクを急かさないため。
+        # 見失わないよう、HTMLは団体別ボード、mdは「待ち」節に残す（2026/08/14 増野さん決定）
+        if not dd or t.get("status") in ("done", "waiting"): return None
         if t.get("timebound") == "true": return None  # 拘束は2週間ある/カレンダーで見る
         n = (dd - today).days
         if n < 0: return "overdue"
@@ -145,6 +147,10 @@ def main(root, today_s, out_path, fixed_path=None):
     monitors = sorted([t for t in tasks if t.get("role") == "monitor"],
                       key=lambda t: (t.get("next_check", "9999"), t.get("due", "")))
     mon_due = [t for t in monitors if d(t.get("next_check", "")) and (d(t["next_check"]) - today).days <= 7]
+
+    # 相手の作業・納品待ち。期限アラートから外した分をここで拾い、見失わないようにする（2026/08/14）
+    waiting_list = sorted([t for t in tasks if t.get("status") == "waiting"],
+                          key=lambda t: t.get("due") or "9999/99/99")
 
     orgs_tasks = {}
     for t in tasks:
@@ -460,6 +466,10 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
 {'<p class="sub">期限切れ</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["overdue"]) + '</ul>' if alerts["overdue"] else ''}
 {'<p class="sub">3日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["d3"]) + '</ul>' if alerts["d3"] else ''}
 {'<p class="sub">14日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in alerts["d14"]) + '</ul>' if alerts["d14"] else ''}
+
+{h2(f'👥 待ち（相手の作業・納品）— {len(waiting_list)}件',
+    '自分では動かせないタスク。期限アラートには出さないが、放置しないためここに集める。期日は目安。')}
+{'<ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in waiting_list) + '</ul>' if waiting_list else '<p class="note">待ちのタスクはありません。</p>'}
 
 {h2('👀 監視の期日', '担当が他の人（role: monitor）で、next_check が7日以内に来たもの。確認したら next_check を先送りする。')}
 {'<ul>' + "".join(row(t, True) for t in mon_due) + '</ul>' if mon_due else '<p class="note">今週の見回りはありません。</p>'}

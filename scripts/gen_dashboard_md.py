@@ -100,7 +100,9 @@ def main(root, today_s, out_path, fixed_path=None):
 
     def bucket(t):
         dd = d(t.get("due", ""))
-        if not dd or t.get("status") == "done": return None
+        # waiting（相手の作業・納品待ち）はアラートから外す。自分が動けないタスクを急かさないため。
+        # 見失わないよう、HTMLは団体別ボード、mdは「待ち」節に残す（2026/08/14 増野さん決定）
+        if not dd or t.get("status") in ("done", "waiting"): return None
         if t.get("timebound") == "true": return None
         n = (dd - today).days
         if n < 0: return "overdue"
@@ -116,6 +118,10 @@ def main(root, today_s, out_path, fixed_path=None):
     monitors = sorted([t for t in tasks if t.get("role") == "monitor"],
                       key=lambda t: (t.get("next_check", "9999"), t.get("due", "")))
     mon_due = [t for t in monitors if d(t.get("next_check", "")) and (d(t["next_check"]) - today).days <= 7]
+
+    # 相手の作業・納品待ち。期限アラートから外した分をここで拾い、見失わないようにする（2026/08/14）
+    waiting_list = sorted([t for t in tasks if t.get("status") == "waiting"],
+                          key=lambda t: t.get("due") or "9999/99/99")
 
     def tl_ok(t):
         if not children.get(t["id"]) or t.get("status") == "done": return False
@@ -191,6 +197,13 @@ def main(root, today_s, out_path, fixed_path=None):
             L.append(f"**{lab}**")
             for t in alerts[key]: L.append(line(t, parent=True))
     if not any(alerts.values()):
+        L.append("なし")
+    L.append("")
+
+    L.append(f"## 👥 待ち（相手の作業・納品）{len(waiting_list)}件")
+    if waiting_list:
+        for t in waiting_list: L.append(line(t, parent=True))
+    else:
         L.append("なし")
     L.append("")
 
