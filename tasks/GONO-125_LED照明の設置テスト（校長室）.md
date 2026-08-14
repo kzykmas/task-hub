@@ -1,0 +1,33 @@
+---
+id: GONO-125
+org: 郷野の郷
+title: LED照明の設置テスト（校長室）
+short: 設置テスト
+status: todo
+size: light
+labor: physical
+role: do
+due: 2026/08/28
+reason: 
+later: 
+owner: 
+category: B
+category_name: 柱1実証
+src_no: 
+parent: GONO-110
+project: 
+created: 2026/08/12
+done_date: 
+---
+
+# GONO-125 LED照明の設置テスト（校長室）
+
+## 概要
+納品されたLED照明を校長室に設置し、動作テストを行う。**軽タスク・肉体作業**。
+GONO-126（検品）の後、GONO-123（試験点灯・評価）の前。
+
+## 経緯
+- 2026/08/12 増野さん指示で起票。
+- 期日は8/31（GONO-123）から逆算した仮置き（AI推測。納品状況が分かれば要調整）。
+- 2026/08/11 GONO-124（納品検品）を「納品」（完了）と「検品」（GONO-126）に分割したのに伴い、
+  前段の参照先をGONO-126に更新。

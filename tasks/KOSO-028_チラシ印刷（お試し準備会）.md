@@ -1,0 +1,20 @@
+---
+id: KOSO-028
+org: 構想P
+title: チラシ印刷（お試し準備会）
+short: チラシ印刷
+status: this_week
+role: do
+due: 2026/08/14
+reason: 
+later: 
+owner: 
+parent: KOSO-001
+lead: 6d
+project: 20260708_森の散策と木工教室
+created: 2026/08/07
+done_date: 
+---
+## 経緯
+- 2026/08/13 増野さん指示。明日8/14（金）に印刷発注を予定。due を8/14に確定
+  （parentのKOSO-001 8/20・lead 6dの逆算ともほぼ一致）。
