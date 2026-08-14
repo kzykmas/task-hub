@@ -1,34 +1,31 @@
 # task-hub
 
-増野の全団体タスクの**正本**リポジトリ。ボード（HTML）を生成し、GitHub Actions でさくらのレンタルサーバへ配信する。
+増野の全団体タスクの**正本**リポジトリ。`tasks/*.md` からボードを生成し、
+GitHub Actions でさくらのレンタルサーバへ配信する。
 
-- **正本＝GitHub／配信＝さくら／知識＝Obsidian Vault**（3層分離）
-- 生成物（ボード）は手編集しない。tasks/ を直せば次の生成で反映される。
-- 端末側で git は動かさない。
+**正本＝GitHub／配信＝さくら／知識・資料＝Obsidian Vault**（3層分離）。
+生成物（`board/`）は手編集しない。直すのは `tasks/` か `scripts/`。
 
-## フォルダ
+## 更新のしかた
 
-| 場所 | 中身 |
-|---|---|
-| `tasks/` | ★正本。全団体フラット（GONO-128.md, STRM-011.md …） |
-| `config/` | numbering.json（採番台帳）／timebox.json／star_rules.md |
-| `scripts/` | gen_dashboard.py（HTML＋md同時生成）／new_task.py／update_task.py／verify.py |
-| `board/` | 生成物。`board/index.html` が push されると Actions がさくらへ送る |
-| `docs/` | 設計書・共通ルール・秘書手順書 |
-| `archive/YYYY-MM/` | done を月次で移動（P4） |
+```bash
+scripts/update.sh "コミットメッセージ"
+```
 
-`tasks/` は**フラット**（団体別フォルダを作らない）。ID接頭辞で識別し、団体追加は numbering.json に1行足すだけ。
+pull --rebase --autostash → ボード再生成 → 実質無変更なら何もしない → commit → main へ push。
+`board/**` への push で Actions が発火し、20秒ほどでさくらのボードが最新になる。
 
 ## 見る場所
 
-`https://<アカウント>.sakura.ne.jp/taskboard/`（Basic認証）。iPhoneのホーム画面から1タップ。
+`https://<アカウント>.sakura.ne.jp/taskboard/`（Basic認証）。iPhone のホーム画面から1タップ。
 
-## 採番
+## 詳しくは
 
-`config/numbering.json` の `last` を `new_task.py` が読む→+1→ファイル作成→台帳更新を**1コミット**で行う。人は番号を振らない。push reject 時は `pull --rebase` 後に再採番。
+| 文書 | 中身 |
+|---|---|
+| [CLAUDE.md](CLAUDE.md) | 秘書セッションの案内板。役割・作業の型・必ず守ること |
+| [docs/タスクノートの書き方.md](docs/タスクノートの書き方.md) | front matter の全キーと値、`status` の挙動、採番の手順 |
+| [docs/リポジトリ構成.md](docs/リポジトリ構成.md) | フォルダ構成、生成と配信の仕組み、既知の宿題 |
+| [docs/経緯_タスク管理システム.md](docs/経緯_タスク管理システム.md) | なぜこうなっているか。**採らなかった案とその理由**、実測で分かった制約、設計上の教訓 |
 
-## 配信
-
-`board/index.html` への push が `.github/workflows/deploy-sakura.yml` を起動し、さくらの `taskboard/` へ FTPS アップロードする。アップロード先パスは事故防止のため YAML 内に固定でハードコードしてあり、引数化しない。
-
-詳細は `docs/` を参照。
+判断に迷ったら `docs/経緯_タスク管理システム.md` から読む。

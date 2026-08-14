@@ -8,7 +8,7 @@ labor:
 role: do
 due: 2026/09/30
 reason: 
-later: あとで
+later: true
 owner: 
 category: A
 category_name: 運営手続き
@@ -33,3 +33,6 @@ done_date:
 
 ## 経緯
 - 2026/08/12 役員重任登記の作業中に必要性が出たため起票（急ぎではない）
+- 2026/08/14 増野さん指示で `later: あとで` → `later: true` に修正。
+  `true` 以外は無視される仕様のため「あとで」の指定が効いていなかった
+  （docs/リポジトリ構成.md の既知の宿題）。タスクの中身の変更ではない。
