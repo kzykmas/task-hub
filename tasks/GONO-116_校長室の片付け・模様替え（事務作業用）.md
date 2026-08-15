@@ -6,7 +6,7 @@ short: 校長室の片付け
 status: this_week
 labor: physical
 role: do
-today: 2026/08/15
+today: 2026/08/16
 due: 2026/08/20
 reason: 
 later: 
@@ -30,3 +30,4 @@ done_date:
 
 ## 経緯
 - 2026/08/09 増野さん指示で起票。肉体作業・1日30分の分割実施。
+- 2026/08/15 子どもの宿題対応で今日は手をつけられず、明日（8/16）へ。today を更新。
