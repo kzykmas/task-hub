@@ -131,6 +131,10 @@ def main(root, today_s, out_path, fixed_path=None):
         # 見失わないよう、HTMLは団体別ボード、mdは「待ち」節に残す（2026/08/14 増野さん決定）
         if not dd or t.get("status") in ("done", "waiting"): return None
         if t.get("timebound") == "true": return None
+        # 日次の見回り（check_cycle: daily）は期限アラートに出さない。
+        # due は「毎日やるのを終える日」であって締切ではなく、「監視の期日」で毎朝見るものだから
+        # （2026/08/16。重複排除で期限アラートに吸われ、監視に出なくなっていたのを修正）
+        if t.get("check_cycle") == "daily": return None
         n = (dd - today).days
         if n < 0: return "overdue"
         if n <= 3: return "d3"
@@ -220,7 +224,7 @@ def main(root, today_s, out_path, fixed_path=None):
         for t in v_wait_imp: L.append(line(t, parent=True))
     if v_wait_lgt:
         L.append("*軽度*")
-        for t in v_wait_lgt: L.append(f"  {line(t, parent=True)[2:]}")
+        for t in v_wait_lgt: L.append(f"  {line(t, parent=True)}")
     if not v_waiting:
         L.append("なし")
     L.append("")
