@@ -88,6 +88,15 @@ def main(root, today_s, out_path, fixed_path=None):
                      and (t.get("due") == today_s or is_urgent_today(t))],
                     key=lambda t: (t.get("size") == "light", t.get("id")))
 
+    # 待ちの重要度（2026/08/16）。wait: important→常に重要／light→常に軽度／無印→期限1週間前で重要
+    def wait_is_important(t):
+        w = t.get("wait", "")
+        if w == "important": return True
+        if w == "light": return False
+        dd = d(t.get("due", ""))
+        if not dd: return False
+        return (dd - today).days <= 7
+
     # 今日やるつもり（2026/08/15 新設）。至急と重複しても両方に出す
     today_plan = sorted([t for t in tasks if t.get("status") not in ("done", "dropped")
                          and t.get("today") == today_s],
@@ -146,7 +155,8 @@ def main(root, today_s, out_path, fixed_path=None):
         dues = [d(x["due"]) for x in [t] + children[t["id"]] if x.get("due")]
         return bool(dues) and 0 <= (max(dues) - today).days <= TIMELINE_DAYS
     anchors = [t for t in tasks if tl_ok(t) and not t.get("parent")]
-    anchors.sort(key=lambda t: t.get("due") or "9999")
+    # pin: true を最上位に固定（2026/08/16）。期日が先でも常に目に入れたい手続き用
+    anchors.sort(key=lambda t: (t.get("pin") != "true", t.get("due") or "9999"))
 
     # ---- Markdown 部品（新規）----
     def duemark(t):
@@ -184,10 +194,12 @@ def main(root, today_s, out_path, fixed_path=None):
 
     v_urgent   = uniq(urgent)
     v_today    = uniq(today_plan)
+    v_waiting  = uniq(waiting_list)   # 毎朝まずチェックするため今日やるつもりの直下（2026/08/16）
+    v_wait_imp = [t for t in v_waiting if wait_is_important(t)]
+    v_wait_lgt = [t for t in v_waiting if not wait_is_important(t)]
     v_tw_heavy = uniq(tw_heavy)
     v_tw_light = uniq(tw_light)
     v_alerts   = {k: uniq(alerts[k]) for k in ("overdue", "d3", "d14")}
-    v_waiting  = uniq(waiting_list)
     v_mon_due  = uniq(mon_due)
 
     if v_urgent:
@@ -200,6 +212,17 @@ def main(root, today_s, out_path, fixed_path=None):
         for t in v_today: L.append(line(t, parent=True))
     else:
         L.append("登録なし")
+    L.append("")
+
+    L.append(f"## 👥 待ち（相手の作業・納品）{len(v_waiting)}件{plus(v_waiting, waiting_list)}")
+    if v_wait_imp:
+        L.append("**重要**")
+        for t in v_wait_imp: L.append(line(t, parent=True))
+    if v_wait_lgt:
+        L.append("*軽度*")
+        for t in v_wait_lgt: L.append(f"  {line(t, parent=True)[2:]}")
+    if not v_waiting:
+        L.append("なし")
     L.append("")
 
     L.append(f"## ⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）")
@@ -235,13 +258,6 @@ def main(root, today_s, out_path, fixed_path=None):
             L.append(f"**{lab}**")
             for t in v_alerts[key]: L.append(line(t, parent=True))
     if not any(v_alerts.values()):
-        L.append("なし")
-    L.append("")
-
-    L.append(f"## 👥 待ち（相手の作業・納品）{len(v_waiting)}件{plus(v_waiting, waiting_list)}")
-    if v_waiting:
-        for t in v_waiting: L.append(line(t, parent=True))
-    else:
         L.append("なし")
     L.append("")
 

@@ -160,6 +160,18 @@ def main(root, today_s, out_path, fixed_path=None):
     waiting_list = sorted([t for t in tasks if t.get("status") == "waiting"],
                           key=lambda t: t.get("due") or "9999/99/99")
 
+    # 待ちの重要度（2026/08/15 増野さん決定）。毎朝まずチェックする節なので、
+    # 「今すぐ気にすべきもの」と「まだ寝かせてよいもの」を見た目で分ける。
+    #   wait: important → 常に重要／wait: light → 常に軽度
+    #   無印 → 期限の1週間前を切ったら重要、それより先なら軽度（自動判定）
+    def wait_is_important(t):
+        w = t.get("wait", "")
+        if w == "important": return True
+        if w == "light": return False
+        dd = d(t.get("due", ""))
+        if not dd: return False
+        return (dd - today).days <= 7
+
     orgs_tasks = {}
     for t in tasks:
         orgs_tasks.setdefault(t["org"], []).append(t)
@@ -316,7 +328,9 @@ def main(root, today_s, out_path, fixed_path=None):
         dues = [d(x["due"]) for x in [t] + children[t["id"]] if x.get("due")]
         return bool(dues) and 0 <= (max(dues) - today).days <= TIMELINE_DAYS
     anchors = [t for t in tasks if tl_ok(t) and not t.get("parent")]
-    anchors.sort(key=lambda t: t.get("due") or "9999")
+    # pin: true を最上位に固定（2026/08/16）。法令期限のように、期日が先でも
+    # 常に目に入っていないと困る手続きのため。それ以外は従来どおり期日順。
+    anchors.sort(key=lambda t: (t.get("pin") != "true", t.get("due") or "9999"))
     timelines = "".join(timeline_svg(a, children[a["id"]]) for a in anchors)
 
     # ---- 団体別ボード ----
@@ -379,10 +393,12 @@ def main(root, today_s, out_path, fixed_path=None):
         return f'<span class="note">（＋上の節に{n}件）</span>' if n else ""
     v_urgent   = uniq(urgent)
     v_today    = uniq(today_plan)
+    v_waiting  = uniq(waiting_list)   # 「待ち」は毎朝まずチェックするため今日やるつもりの直下（2026/08/16）
+    v_wait_imp = [t for t in v_waiting if wait_is_important(t)]
+    v_wait_lgt = [t for t in v_waiting if not wait_is_important(t)]
     v_tw_heavy = uniq(tw_heavy)
     v_tw_light = uniq(tw_light)
     v_alerts   = {k: uniq(alerts[k]) for k in ("overdue", "d3", "d14")}
-    v_waiting  = uniq(waiting_list)
     v_mon_due  = uniq(mon_due)
 
     page = f"""<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
@@ -441,6 +457,8 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
   font-size:13px; margin:8px 0; }}
 .urgentbox {{ background:#d6303114; border:2px solid #d63031; border-radius:10px; padding:6px 14px; }}
 .todaybox {{ background:#0984e314; border:2px solid #0984e3; border-radius:10px; padding:6px 14px; }}
+.waitbox {{ background:#e1730014; border:2px solid #e17300; border-radius:10px; padding:6px 14px; }}
+ul.dim li {{ opacity:0.5; }}
 .hidden-note {{ color:var(--text-secondary); font-size:11px; margin:8px 0 0; font-style:italic; }}
 .daystrip {{ display:grid; grid-template-columns:repeat(7, 1fr); gap:5px; margin-bottom:5px; }}
 .day {{ background:var(--surface-2); border-radius:8px; padding:6px 7px; min-height:56px; font-size:11px; }}
@@ -493,6 +511,14 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
     '至急に出したものはここには出さない。') + omitted(v_today, today_plan)}
 {'<div class="todaybox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_today) + '</ul></div>' if v_today else '<p class="note">上の節に出していない、今日やるつもりのタスクはありません。</p>'}
 
+{h2(f'👥 待ち（相手の作業・納品）— {len(v_waiting)}件',
+    '自分では動かせないタスク。毎朝ここを見て、動いたものが無いか確かめる。'
+    '重要＝いま気にすべきもの／軽度＝まだ寝かせてよいもの（期限の1週間前を切ると重要へ移る）。')
+ + omitted(v_waiting, waiting_list)}
+{'<p class="sub">重要</p><div class="waitbox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_wait_imp) + '</ul></div>' if v_wait_imp else ''}
+{'<p class="sub">軽度</p><ul class="dim">' + "".join(row(t, True, expand=False, show_parent=True) for t in v_wait_lgt) + '</ul>' if v_wait_lgt else ''}
+{'<p class="note">待ちのタスクはありません。</p>' if not v_waiting else ''}
+
 {h2(f'⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）',
     '1時間以上の検討・調整・検証。タスクノートの size: light が無印のもの。拘束（timebound）は「2週間ある」で見る。')}
 {f'<div class="warn">重タスクが{THIS_WEEK_LIMIT}枚制限を超えています。減らしてください。</div>' if over_limit else ''}
@@ -508,10 +534,6 @@ h2 {{ display:flex; align-items:center; gap:8px; }}
 {'<p class="sub">期限切れ</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["overdue"]) + '</ul>' if v_alerts["overdue"] else ''}
 {'<p class="sub">3日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["d3"]) + '</ul>' if v_alerts["d3"] else ''}
 {'<p class="sub">14日以内</p><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_alerts["d14"]) + '</ul>' if v_alerts["d14"] else ''}
-
-{h2(f'👥 待ち（相手の作業・納品）— {len(v_waiting)}件',
-    '自分では動かせないタスク。期限アラートには出さないが、放置しないためここに集める。期日は目安。') + omitted(v_waiting, waiting_list)}
-{'<ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_waiting) + '</ul>' if v_waiting else '<p class="note">待ちのタスクはありません。</p>'}
 
 {h2('👀 監視の期日', '担当が他の人（role: monitor）で、next_check が7日以内に来たもの。確認したら next_check を先送りする。')}
 {'<ul>' + "".join(row(t, True) for t in v_mon_due) + '</ul>' if v_mon_due else '<p class="note">今週の見回りはありません。</p>'}
