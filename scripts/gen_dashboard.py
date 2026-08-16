@@ -276,9 +276,10 @@ def main(root, today_s, out_path, fixed_path=None):
         # 同時に見られなくなった（スクロールするとラベル列が画面外へ出る）。
         # 幅そのものを詰めて、375pxでもスクロール無しで全体が入る寸法にする。
         # デスクトップは CSS の max-width で拡大しすぎないよう抑える。
-        W, LBL, RH, PAD = 500, 180, 26, 8
-        AXF = 13            # 注記のフォント（はみ出し判定に使う）
-        LBLCAP = 11.5       # ラベル列に入る全角換算の文字数（実測に合わせた安全値）
+        W, LBL, RH, PAD = 518, 200, 26, 8
+        AXF = 14            # 注記のフォント（はみ出し判定に使う）
+        LBLCAP = 12.2       # ラベル列に入る全角換算の文字数。
+        # ①（）などは1emより広く描かれ、概算より3%ほど伸びる。(LBL-8)/15=12.8 に対し安全側に取る
         H = len(rows) * RH + 34
         # 右端はボックス右の注記（日付・担当）を書くため広めに空ける。
         # 空けないと最終日のラベルが「08/3」のように切れる（2026/08/16 実表示で確認）
@@ -609,13 +610,13 @@ ul.dim li {{ opacity:0.5; }}
 .todayline {{ stroke:#2a78d6; stroke-width:1.5; stroke-dasharray:3 3; }}
 .dep {{ fill:none; stroke:var(--text-secondary); stroke-width:1.1; opacity:0.75; }}
 .dephead {{ fill:var(--text-secondary); opacity:0.75; }}
-.ax {{ font-size:13px; fill:var(--text-secondary); }}
-.lbl {{ font-size:14px; fill:var(--text-primary); }}
+.ax {{ font-size:14px; fill:var(--text-secondary); }}
+.lbl {{ font-size:15px; fill:var(--text-primary); }}
 .lbl.tl-done, .lbl.tl-wait {{ fill:var(--text-secondary); }}
 .tlblock {{ margin:10px 0 16px; }}
 /* viewBoxを470まで詰めたので、375pxでも横スクロール無しで全体が入る。
    デスクトップで間延びしないよう上限を置く（2026/08/16 レビュー反映） */
-.tlblock svg {{ width:100%; max-width:620px; display:block; }}
+.tlblock svg {{ width:100%; max-width:640px; display:block; }}
 .tlhead {{ font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; margin-bottom:2px; }}
 .parentref {{ color:var(--text-secondary); font-size:10.5px; margin-left:2px; }}
 .tlbadge {{ font-size:11px; font-weight:normal; color:var(--text-secondary);
