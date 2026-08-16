@@ -5,6 +5,7 @@ title: 確定決算の会員電子承認
 status: todo
 role: do
 due: 2026/08/30
+after: GONO-011,GONO-133
 reason: 
 later: 
 owner: 

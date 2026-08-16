@@ -7,6 +7,7 @@ status: todo
 size: light
 role: do
 due: 2026/08/25
+after: GONO-009
 reason: 
 later: 
 owner: 

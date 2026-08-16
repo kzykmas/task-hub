@@ -5,6 +5,7 @@ title: 確定決算に対する監事監査
 status: todo
 role: monitor
 due: 2026/08/21
+after: GONO-009
 reason: 
 later: 
 owner: 中田

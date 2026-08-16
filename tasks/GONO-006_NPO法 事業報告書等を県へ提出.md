@@ -5,6 +5,7 @@ title: NPO法 事業報告書等を県へ提出
 status: todo
 role: do
 due: 2026/08/31
+after: GONO-010
 reason: 法令期限
 pin: true
 later: 

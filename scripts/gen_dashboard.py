@@ -195,6 +195,16 @@ def main(root, today_s, out_path, fixed_path=None):
             parts.append('<span class="chip gray">あとで</span>')
         if t.get("owner"):
             parts.append(f'<span class="chip blue">{esc(t["owner"])}</span>')
+        # 待ちタスクの状態（2026/08/16）：タスク名が行為（「〜連絡」）だと、こちらが未着手に見える。
+        # 「依頼済み・待ちN日目」を出して、自分の手は離れていることを一目で分かるようにする
+        if t.get("status") == "waiting":
+            ad = d(t.get("asked", ""))
+            if ad:
+                wn = max((today - ad).days, 0)
+                lab = f'⏳依頼済み・待ち{wn}日目' if wn > 0 else '⏳依頼済み（今日）'
+                parts.append(f'<span class="chip gray">{lab}</span>')
+            else:
+                parts.append('<span class="chip" style="background:#d63031">未依頼</span>')
         return "".join(parts)
     def duetag(t):
         dd = d(t.get("due", ""))
@@ -249,17 +259,20 @@ def main(root, today_s, out_path, fixed_path=None):
 
     # ---- 企画タイムライン（v1: 期日・parent/lead・timeboundだけで描く簡易PDM）----
     def timeline_svg(anchor, kids):
-        rows = [anchor] + sorted(kids, key=lambda t: t.get("due") or "9999")
+        """ガント風タイムライン（2026/08/16 全面改訂）。
+        各タスクを「期日の1日分のボックス」で描き、after: の依存関係を矢印で結ぶ。
+        従来の「今日から期日までの棒」は、どれが先でどれが後かが読めなかったため置き換えた。"""
+        rows = sorted([anchor] + kids, key=lambda t: (t.get("due") or "9999", t.get("id")))
         dues = [d(t["due"]) for t in rows if t.get("due")]
-        start = today - datetime.timedelta(days=1)
-        end = max(dues + [today + datetime.timedelta(days=14)]) + datetime.timedelta(days=3)
+        start = min(dues + [today]) - datetime.timedelta(days=1)
+        end = max(dues + [today]) + datetime.timedelta(days=2)
         span = max((end - start).days, 7)
-        W, LBL, RH, PAD = 660, 230, 24, 8
+        W, LBL, RH, PAD = 660, 230, 26, 8
         H = len(rows) * RH + 34
         def x(dt):
             return LBL + (dt - start).days / span * (W - LBL - 12)
+        dayw = max((W - LBL - 12) / span, 11)   # 1日分の幅（細すぎると見えないので下限を置く）
         parts = []
-        # ティック: 短い期間は週（月曜）、長い期間は月初にして重ならないようにする
         monthly = span > 70
         dd = start
         while dd <= end:
@@ -270,13 +283,35 @@ def main(root, today_s, out_path, fixed_path=None):
                 parts.append(f'<text x="{x(dd):.1f}" y="{H-8}" class="ax" text-anchor="middle">{lab}</text>')
             dd += datetime.timedelta(days=1)
         parts.append(f'<line x1="{x(today):.1f}" y1="6" x2="{x(today):.1f}" y2="{H-22}" class="todayline"/>')
+
+        # --- 先に各行の座標を確定する（矢印を引くのに両端の位置が要る）---
+        geo = {}
+        for i, t in enumerate(rows):
+            ddx = d(t.get("due", ""))
+            if not ddx: continue
+            y = i * RH + 18
+            x0 = x(ddx)
+            geo[t["id"]] = (x0, x0 + dayw, y)
+
+        # --- 依存の矢印（after: 前工程のID。カンマ区切りで複数可）---
+        # ボックスより先に描いて背面に置く
+        for t in rows:
+            if t["id"] not in geo: continue
+            for pid in [a.strip() for a in (t.get("after", "") or "").split(",") if a.strip()]:
+                if pid not in geo: continue
+                px0, px1, py = geo[pid]
+                sx0, sx1, sy = geo[t["id"]]
+                mid = (px1 + sx0) / 2 if sx0 > px1 + 8 else px1 + 6
+                parts.append(f'<path d="M{px1:.1f} {py} L{mid:.1f} {py} L{mid:.1f} {sy} L{sx0-5:.1f} {sy}" class="dep"/>')
+                parts.append(f'<path d="M{sx0:.1f} {sy} l-5 -3.2 l0 6.4 Z" class="dephead"/>')
+
         for i, t in enumerate(rows):
             y = i * RH + 18
-            dd = d(t.get("due", ""))
-            if i == 0:
-                label = (t.get("src_no") or t["id"]) + " " + t.get("title", "")
+            ddx = d(t.get("due", ""))
+            is_goal = t["id"] == anchor["id"]
+            if is_goal:
+                label = "★" + (t.get("short") or t.get("title", ""))
             else:
-                # 完了子タスクは ✓ を付けてハッキリ完了と分かるようにする（2026/08/13）。waitingには付けない
                 mark = "✓" if t.get("status") == "done" else "　"
                 label = mark + (t.get("short") or t.get("title", ""))
             if len(label) > 22: label = label[:21] + "…"
@@ -284,35 +319,40 @@ def main(root, today_s, out_path, fixed_path=None):
             wait = t.get("status") == "waiting"
             cls = "tl-done" if done else ("tl-wait" if wait else "")
             parts.append(f'<text x="{LBL-8}" y="{y+4}" class="lbl {cls}" text-anchor="end">{esc(label)}</text>')
-            if not dd:
+            if not ddx:
                 continue
-            n = (dd - today).days
+            n = (ddx - today).days
             col = "#8a8984" if (done or wait) else (
                   "#d63031" if n <= 0 else ("#e67e22" if n <= 3 else ("#c9a227" if n <= 14 else "#2a78d6")))
+            x0, x1, _ = geo[t["id"]]
             if t.get("timebound") == "true":
-                cx, cy, r = x(dd), y, 6
-                parts.append(f'<path d="M{cx} {cy-r} L{cx+r} {cy} L{cx} {cy+r} L{cx-r} {cy} Z" fill="{col}"/>')
+                cx, cy, r = x0 + dayw / 2, y, 7
+                parts.append(f'<path d="M{cx:.1f} {cy-r} L{cx+r:.1f} {cy} L{cx:.1f} {cy+r} L{cx-r:.1f} {cy} Z" fill="{col}"/>')
                 if t.get("undated") == "true":
-                    parts.append(f'<text x="{cx+9:.1f}" y="{y+4}" class="ax">〜{t["due"][5:]} 日付未定</text>')
+                    parts.append(f'<text x="{cx+10:.1f}" y="{y+4}" class="ax">〜{t["due"][5:]} 日付未定</text>')
+                continue
+            op = 0.45 if (done or wait) else 0.92
+            if t.get("owner"):   # 相手の作業は破線の輪郭
+                parts.append(f'<rect x="{x0:.1f}" y="{y-7}" width="{dayw:.1f}" height="14" rx="3" '
+                             f'fill="{col}" fill-opacity="0.18" stroke="{col}" stroke-width="1.2" stroke-dasharray="3 2"/>')
+            elif is_goal:        # ゴールは太枠で強調
+                parts.append(f'<rect x="{x0:.1f}" y="{y-8}" width="{dayw:.1f}" height="16" rx="3" '
+                             f'fill="{col}" fill-opacity="0.9" stroke="#1b1b1b" stroke-width="1.6"/>')
             else:
-                x0 = x(max(today, start))
-                x1 = max(x(dd), x0 + 3)
-                if t.get("owner"):  # 相手の作業（2026/08/10）: 破線の輪郭バー＋担当名
-                    parts.append(f'<rect x="{x0:.1f}" y="{y-4}" width="{x1-x0:.1f}" height="8" rx="4" '
-                                 f'fill="{col}" fill-opacity="0.18" stroke="{col}" stroke-width="1.2" stroke-dasharray="4 3"/>')
-                    # asked（依頼日）があれば「待ちn日目」を付記（2026/08/10 新機能a）。
-                    # まだ依頼していない（asked未記入）なら「未依頼」で目立たせる
-                    ad = d(t.get("asked", ""))
-                    if ad:
-                        wn = max((today - ad).days, 0)
-                        wait_lbl = f'{esc(t["owner"])}・待ち{wn}日目' if wn > 0 else f'{esc(t["owner"])}・依頼済み'
-                    elif not done and not wait:
-                        wait_lbl = f'{esc(t["owner"])}・<tspan fill="#d63031">未依頼</tspan>'
-                    else:
-                        wait_lbl = esc(t["owner"])
-                    parts.append(f'<text x="{x1+5:.1f}" y="{y+4}" class="ax">{wait_lbl}</text>')
+                parts.append(f'<rect x="{x0:.1f}" y="{y-7}" width="{dayw:.1f}" height="14" rx="3" fill="{col}" opacity="{op}"/>')
+            # ボックス右に注記（日付・担当・待ち日数）
+            note = t["due"][5:]
+            if t.get("owner"):
+                ad = d(t.get("asked", ""))
+                if ad:
+                    wn = max((today - ad).days, 0)
+                    note += f' {esc(t["owner"])}・待ち{wn}日目' if wn > 0 else f' {esc(t["owner"])}・依頼済み'
+                elif not done and not wait:
+                    note += f' {esc(t["owner"])}・未依頼'
                 else:
-                    parts.append(f'<rect x="{x0:.1f}" y="{y-4}" width="{x1-x0:.1f}" height="8" rx="4" fill="{col}" opacity="{0.45 if done or wait else 0.9}"/>')
+                    note += " " + esc(t["owner"])
+            parts.append(f'<text x="{x1+5:.1f}" y="{y+4}" class="ax">{note}</text>')
+
         title = (anchor.get("src_no") or anchor["id"]) + " " + anchor.get("title", "")
         # 残子タスク数バッジ（2026/08/13）: done/dropped 以外を「残」と数える（droppedは読込時点で除外済み）
         remain = len([k for k in kids if k.get("status") != "done"])
@@ -476,6 +516,8 @@ ul.dim li {{ opacity:0.5; }}
 .orgdot.big {{ width:11px; height:11px; }}
 .grid {{ stroke:var(--line); stroke-width:1; }}
 .todayline {{ stroke:#2a78d6; stroke-width:1.5; stroke-dasharray:3 3; }}
+.dep {{ fill:none; stroke:var(--text-secondary); stroke-width:1.1; opacity:0.75; }}
+.dephead {{ fill:var(--text-secondary); opacity:0.75; }}
 .ax {{ font-size:10px; fill:var(--text-secondary); }}
 .lbl {{ font-size:11px; fill:var(--text-primary); }}
 .lbl.tl-done, .lbl.tl-wait {{ fill:var(--text-secondary); }}

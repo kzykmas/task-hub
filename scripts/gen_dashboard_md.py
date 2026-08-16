@@ -187,6 +187,13 @@ def main(root, today_s, out_path, fixed_path=None):
         dm = duemark(t)
         if dm: bits.append(dm)
         if t.get("owner"): bits.append(f"（{t['owner']}）")
+        if t.get("status") == "waiting":
+            ad = d(t.get("asked", ""))
+            if ad:
+                wn = max((today - ad).days, 0)
+                bits.append(f"⏳依頼済み・待ち{wn}日目" if wn > 0 else "⏳依頼済み（今日）")
+            else:
+                bits.append("⚠️未依頼")
         if parent: bits.append(pref(t).strip(" "))
         return " ".join(b for b in bits if b)
 
