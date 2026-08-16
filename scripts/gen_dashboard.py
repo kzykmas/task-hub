@@ -262,7 +262,12 @@ def main(root, today_s, out_path, fixed_path=None):
         """ガント風タイムライン（2026/08/16 全面改訂）。
         各タスクを「期日の1日分のボックス」で描き、after: の依存関係を矢印で結ぶ。
         従来の「今日から期日までの棒」は、どれが先でどれが後かが読めなかったため置き換えた。"""
-        rows = sorted([anchor] + kids, key=lambda t: (t.get("due") or "9999", t.get("id")))
+        # 期日の無いタスクは行だけ描かれてボックスが出ず「バグで消えた」ように見えるため、
+        # 末尾にまとめて「期日未定」と明記する（2026/08/16 レビュー指摘3）
+        rows = sorted([t for t in [anchor] + kids if t.get("due")],
+                      key=lambda t: (t.get("due"), t.get("id")))
+        undated_rows = [t for t in [anchor] + kids if not t.get("due")]
+        rows += undated_rows
         dues = [d(t["due"]) for t in rows if t.get("due")]
         start = min(dues + [today]) - datetime.timedelta(days=1)
         end = max(dues + [today]) + datetime.timedelta(days=2)
@@ -297,16 +302,40 @@ def main(root, today_s, out_path, fixed_path=None):
             geo[t["id"]] = (x0, x0 + dayw, y)
 
         # --- 依存の矢印（after: 前工程のID。カンマ区切りで複数可）---
-        # ボックスより先に描いて背面に置く
+        # ボックスより先に描いて背面に置く。
+        # 2026/08/16 増野さん指摘：矢印がボックスの右から出ると、右側に書く日付テキストと重なる。
+        # そこで「前工程のボックスの下辺中央から下へ降り、次工程の行の高さで横に走り、
+        # 次工程のボックスの左辺へ入る」経路にした。テキストは常にボックスの右にあるので交わらない。
+        BH = 7                      # ボックスの高さの半分
+        heads = set()               # 合流点で矢印頭が二重に重なるのを防ぐ（レビュー指摘9）
         for t in rows:
             if t["id"] not in geo: continue
             for pid in [a.strip() for a in (t.get("after", "") or "").split(",") if a.strip()]:
                 if pid not in geo: continue
                 px0, px1, py = geo[pid]
                 sx0, sx1, sy = geo[t["id"]]
-                mid = (px1 + sx0) / 2 if sx0 > px1 + 8 else px1 + 6
-                parts.append(f'<path d="M{px1:.1f} {py} L{mid:.1f} {py} L{mid:.1f} {sy} L{sx0-5:.1f} {sy}" class="dep"/>')
-                parts.append(f'<path d="M{sx0:.1f} {sy} l-5 -3.2 l0 6.4 Z" class="dephead"/>')
+                if sy <= py: continue          # 後工程が上にある場合は描かない（順序が壊れている）
+                cx = px0 + dayw / 2            # 前工程ボックスの下辺中央
+                if sx0 - 6 > cx:
+                    # 次工程が右にある: 下へ降りて、次工程の行を横に走り、左辺へ入る
+                    parts.append(f'<path d="M{cx:.1f} {py+BH} L{cx:.1f} {sy} L{sx0-5:.1f} {sy}" class="dep"/>')
+                    key = (round(sx0), round(sy), "R")
+                    if key not in heads:
+                        heads.add(key)
+                        parts.append(f'<path d="M{sx0:.1f} {sy} l-5 -3.2 l0 6.4 Z" class="dephead"/>')
+                else:
+                    # 次工程が真下〜左にある: 行の直上まで降ろし、上辺中央へ入れる
+                    # （旧実装はここで線が箱に届かず、矢印の先にヒゲが出ていた。レビュー指摘1）
+                    tcx = sx0 + dayw / 2
+                    chy = sy - BH - 7
+                    if abs(tcx - cx) < 0.6:
+                        parts.append(f'<path d="M{cx:.1f} {py+BH} L{cx:.1f} {sy-BH}" class="dep"/>')
+                    else:
+                        parts.append(f'<path d="M{cx:.1f} {py+BH} L{cx:.1f} {chy:.1f} L{tcx:.1f} {chy:.1f} L{tcx:.1f} {sy-BH}" class="dep"/>')
+                    key = (round(tcx), round(sy), "D")
+                    if key not in heads:
+                        heads.add(key)
+                        parts.append(f'<path d="M{tcx:.1f} {sy-BH} l-3.2 -5.5 l6.4 0 Z" class="dephead"/>')
 
         for i, t in enumerate(rows):
             y = i * RH + 18
@@ -317,30 +346,42 @@ def main(root, today_s, out_path, fixed_path=None):
             else:
                 mark = "✓" if t.get("status") == "done" else "　"
                 label = mark + (t.get("short") or t.get("title", ""))
-            if len(label) > 22: label = label[:21] + "…"
+            # 文字数ではなく表示幅で省略する。全角と半角が混ざると文字数基準では溢れる（レビュー指摘7）
+            def _w(ss): return sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in ss)
+            if _w(label) > 19.5:
+                acc = ""
+                for c in label:
+                    if _w(acc + c) > 18.5: break
+                    acc += c
+                label = acc + "…"
             done = t.get("status") == "done"
             wait = t.get("status") == "waiting"
             cls = "tl-done" if done else ("tl-wait" if wait else "")
             parts.append(f'<text x="{LBL-8}" y="{y+4}" class="lbl {cls}" text-anchor="end">{esc(label)}</text>')
             if not ddx:
+                # 何も描かないと「バグで消えた」ように見えるので明示する（レビュー指摘3）
+                parts.append(f'<text x="{LBL+4}" y="{y+4}" class="ax">期日未定</text>')
                 continue
             n = (ddx - today).days
             col = "#8a8984" if (done or wait) else (
                   "#d63031" if n <= 0 else ("#e67e22" if n <= 3 else ("#c9a227" if n <= 14 else "#2a78d6")))
             x0, x1, _ = geo[t["id"]]
             if t.get("timebound") == "true":
-                cx, cy, r = x0 + dayw / 2, y, 7
-                parts.append(f'<path d="M{cx:.1f} {cy-r} L{cx+r:.1f} {cy} L{cx:.1f} {cy+r} L{cx-r:.1f} {cy} Z" fill="{col}"/>')
-                if t.get("undated") == "true":
-                    parts.append(f'<text x="{cx+10:.1f}" y="{y+4}" class="ax">〜{t["due"][5:]} 日付未定</text>')
+                cx, cy, r = x0 + dayw / 2, y, 7.5
+                # ゴールは太枠で強調（暗色でも見えるよう線色はテキスト色。レビュー指摘2）
+                gs = ' stroke="var(--text-primary)" stroke-width="1.6"' if is_goal else ""
+                parts.append(f'<path d="M{cx:.1f} {cy-r} L{cx+r:.1f} {cy} L{cx:.1f} {cy+r} L{cx-r:.1f} {cy} Z" fill="{col}"{gs}/>')
+                # ◆にも日付を出す。従来は省いていて、開催日がボード上に文字で出ていなかった（レビュー指摘4）
+                nt = f'〜{t["due"][5:]} 日付未定' if t.get("undated") == "true" else t["due"][5:]
+                parts.append(f'<text x="{cx+r+4:.1f}" y="{y+4}" class="ax">{nt}</text>')
                 continue
             op = 0.45 if (done or wait) else 0.92
             if t.get("owner"):   # 相手の作業は破線の輪郭
                 parts.append(f'<rect x="{x0:.1f}" y="{y-7}" width="{dayw:.1f}" height="14" rx="3" '
                              f'fill="{col}" fill-opacity="0.18" stroke="{col}" stroke-width="1.2" stroke-dasharray="3 2"/>')
-            elif is_goal:        # ゴールは太枠で強調
-                parts.append(f'<rect x="{x0:.1f}" y="{y-8}" width="{dayw:.1f}" height="16" rx="3" '
-                             f'fill="{col}" fill-opacity="0.9" stroke="#1b1b1b" stroke-width="1.6"/>')
+            elif is_goal:        # ゴールは太枠で強調（暗色背景でも見える色にする。レビュー指摘2）
+                parts.append(f'<rect x="{x0:.1f}" y="{y-8.5}" width="{dayw:.1f}" height="17" rx="3" '
+                             f'fill="{col}" fill-opacity="0.9" stroke="var(--text-primary)" stroke-width="1.8"/>')
             else:
                 parts.append(f'<rect x="{x0:.1f}" y="{y-7}" width="{dayw:.1f}" height="14" rx="3" fill="{col}" opacity="{op}"/>')
             # ボックス右に注記（日付・担当・待ち日数）
@@ -524,7 +565,9 @@ ul.dim li {{ opacity:0.5; }}
 .ax {{ font-size:10px; fill:var(--text-secondary); }}
 .lbl {{ font-size:11px; fill:var(--text-primary); }}
 .lbl.tl-done, .lbl.tl-wait {{ fill:var(--text-secondary); }}
-.tlblock {{ margin:10px 0 16px; }}
+.tlblock {{ margin:10px 0 16px; overflow-x:auto; }}
+/* 狭い画面でSVGが縮んで文字が5px級になるのを防ぐ。最小幅を確保して横スクロールさせる（レビュー指摘5） */
+.tlblock svg {{ min-width:620px; }}
 .tlhead {{ font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; margin-bottom:2px; }}
 .parentref {{ color:var(--text-secondary); font-size:10.5px; margin-left:2px; }}
 .tlbadge {{ font-size:11px; font-weight:normal; color:var(--text-secondary);
@@ -588,8 +631,11 @@ ul.dim li {{ opacity:0.5; }}
 {'<ul>' + "".join(row(t, True) for t in v_mon_due) + '</ul>' if v_mon_due else '<p class="note">今週の見回りはありません。</p>'}
 
 {h2('📐 タイムライン',
-    f'{TIMELINE_DAYS}日以内で細目タスクを持つ企画・手続き。◆＝拘束（開催日等）、バー＝今日から期日までの残り走路。'
-    '赤＝期限切れ／橙＝3日以内／黄＝14日以内／グレー＝完了・待ち。破線バー＝相手（他の人）の作業で、バー右に担当名。')}
+    f'{TIMELINE_DAYS}日以内で細目タスクを持つ企画・手続き。各タスクは期日の1日分のボックスで、'
+    '矢印は after: の依存（前工程→次工程）。★＋太枠＝そのタイムラインのゴール。'
+    '◆＝拘束（日時変更不可の開催日等。「日付未定」は枠だけ確保したもの）。'
+    '破線のボックス＝相手（他の人）の作業で、右に担当・待ち日数。青い縦破線＝今日。'
+    '色は期限の近さ：赤＝期限切れ／橙＝3日以内／黄＝14日以内／青＝それより先、グレー＝完了・待ち。')}
 {timelines if timelines else '<p class="note">対象の企画はありません。</p>'}
 
 {h2('🗂 団体別ボード', '期限の近い順（監視・あとでを除く）＋バックログ（期限なし）＋監視中。全件は task-hub の tasks/ にある。')}
