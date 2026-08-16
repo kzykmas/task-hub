@@ -3,10 +3,10 @@ id: KOSO-035
 org: 構想P
 title: 木工教室 マンリキの柄取付
 short: マンリキの柄取付
-status: doing
+status: done
 labor: physical
 role: do
-today: 2026/08/16
+today: 
 due: 2026/08/17
 reason: 
 later: 
@@ -14,7 +14,7 @@ owner:
 parent: KOSO-001
 project: 20260708_森の散策と木工教室
 created: 2026/08/09
-done_date: 
+done_date: 2026/08/16
 ---
 
 # KOSO-035 木工教室 マンリキの柄取付
@@ -32,3 +32,4 @@ done_date:
   前に終える必要があるための逆算。別の日に回すなら due を変更）。
 - 2026/08/15 作業したが**思い通りにできあがらず**、継続中。明日（8/16）再チャレンジ予定。
   due 8/17 のまま（まだ余裕あり）。today を 8/16 に更新。
+- 2026/08/16 **完了。** 再チャレンジで無事取り付け終わった。
