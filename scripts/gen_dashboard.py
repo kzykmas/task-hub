@@ -276,11 +276,13 @@ def main(root, today_s, out_path, fixed_path=None):
         # 同時に見られなくなった（スクロールするとラベル列が画面外へ出る）。
         # 幅そのものを詰めて、375pxでもスクロール無しで全体が入る寸法にする。
         # デスクトップは CSS の max-width で拡大しすぎないよう抑える。
-        W, LBL, RH, PAD = 470, 160, 26, 8
+        W, LBL, RH, PAD = 500, 180, 26, 8
+        AXF = 13            # 注記のフォント（はみ出し判定に使う）
+        LBLCAP = 11.5       # ラベル列に入る全角換算の文字数（実測に合わせた安全値）
         H = len(rows) * RH + 34
         # 右端はボックス右の注記（日付・担当）を書くため広めに空ける。
         # 空けないと最終日のラベルが「08/3」のように切れる（2026/08/16 実表示で確認）
-        RGT = 62
+        RGT = 66
         def x(dt):
             return LBL + (dt - start).days / span * (W - LBL - RGT)
         dayw = max((W - LBL - RGT) / span, 11)   # 1日分の幅（細すぎると見えないので下限を置く）
@@ -321,14 +323,21 @@ def main(root, today_s, out_path, fixed_path=None):
         # 2026/08/16 増野さん指摘：矢印がボックスの右から出ると、右側に書く日付テキストと重なる。
         # そこで「前工程のボックスの下辺中央から下へ降り、次工程の行の高さで横に走り、
         # 次工程のボックスの左辺へ入る」経路にした。テキストは常にボックスの右にあるので交わらない。
-        def note_text(nx, ny, txt):
-            """ボックス右の注記。viewBoxをはみ出す長さなら右端寄せに切り替える。
-            担当名＋『未依頼』が付くと右端で切れていた（2026/08/16 レビュー後の実測で判明）"""
+        def note_text(nx, ny, txt, mleft=None, mright=None):
+            """ボックス右の注記。
+            素直に右へ書くと viewBox をはみ出す場合は右端寄せにするが、
+            右端寄せした結果マーカーの上に重なることがある（2026/08/16 レビュー重大1。
+            ゴール行3件で数字がボックスに食われていた）。その場合はマーカーの左側へ逃がす。"""
             plain = re.sub(r"<[^>]+>", "", txt)
-            wpx = sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in plain) * 12
-            if nx + wpx > W - 2:
-                return f'<text x="{W-2}" y="{ny+4}" class="ax" text-anchor="end">{txt}</text>'
-            return f'<text x="{nx:.1f}" y="{ny+4}" class="ax">{txt}</text>'
+            wpx = sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in plain) * AXF
+            if nx + wpx <= W - 2:
+                return f'<text x="{nx:.1f}" y="{ny+4}" class="ax">{txt}</text>'
+            # 右端寄せにするとマーカーに掛かるなら、マーカーの手前で右寄せにする
+            if mright is not None and (W - 2 - wpx) < mright + 3:
+                lx = mleft - 4
+                if lx - wpx >= LBL + 2:
+                    return f'<text x="{lx:.1f}" y="{ny+4}" class="ax" text-anchor="end">{txt}</text>'
+            return f'<text x="{W-2}" y="{ny+4}" class="ax" text-anchor="end">{txt}</text>'
 
         BH = 7                      # ボックスの高さの半分
         heads = set()               # 合流点で矢印頭が二重に重なるのを防ぐ（レビュー指摘9）
@@ -372,14 +381,13 @@ def main(root, today_s, out_path, fixed_path=None):
                 label = mark + (t.get("short") or t.get("title", ""))
             # 文字数ではなく表示幅で省略する。全角と半角が混ざると文字数基準では溢れる（レビュー指摘7）
             # 期日が無いものは注記をプロット領域に置くと日付として誤読される（レビュー軽微1）。
-            # ラベルに畳み込んで位置の曖昧さを無くす。**省略より先に**足さないとはみ出す
-            if not ddx:
-                label += "（期日未定）"
+            # ラベル末尾に畳み込むが、**省略で消えては意味が無い**ので注記は必ず残し、
+            # 本文だけを詰める（レビュー重大2。GONO-110が再び空行に見えていた）
             def _w(ss): return sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in ss)
-            if _w(label) > 10.4:
+            if _w(label) > LBLCAP:
                 acc = ""
                 for c in label:
-                    if _w(acc + c) > 9.4: break
+                    if _w(acc + c) > LBLCAP - 1.0: break
                     acc += c
                 label = acc + "…"
             done = t.get("status") == "done"
@@ -387,6 +395,10 @@ def main(root, today_s, out_path, fixed_path=None):
             cls = "tl-done" if done else ("tl-wait" if wait else "")
             parts.append(f'<text x="{LBL-8}" y="{y+4}" class="lbl {cls}" text-anchor="end">{esc(label)}</text>')
             if not ddx:
+                # 期日が無い行。マーカーは置かない（プロット上に置くと日付を示唆するため）。
+                # 注記は他の行と同じ「右側のax」の作法に揃え、右端に固定して位置の曖昧さを無くす。
+                # ラベル末尾に畳み込むと省略で消えてしまうため、この形にした（レビュー重大2）
+                parts.append(f'<text x="{W-2}" y="{y+4}" class="ax" text-anchor="end">期日未定</text>')
                 continue
             n = (ddx - today).days
             col = "#8a8984" if (done or wait) else (
@@ -399,7 +411,7 @@ def main(root, today_s, out_path, fixed_path=None):
                 parts.append(f'<path d="M{cx:.1f} {cy-r} L{cx+r:.1f} {cy} L{cx:.1f} {cy+r} L{cx-r:.1f} {cy} Z" fill="{col}"{gs}/>')
                 # ◆にも日付を出す。従来は省いていて、開催日がボード上に文字で出ていなかった（レビュー指摘4）
                 nt = f'〜{t["due"][5:]} 日付未定' if t.get("undated") == "true" else t["due"][5:]
-                parts.append(note_text(cx + r + 4, y, nt))
+                parts.append(note_text(cx + r + 4, y, nt, cx - r - 2, cx + r + 2))
                 continue
             op = 0.45 if (done or wait) else 0.92
             if t.get("owner"):   # 相手の作業は破線の輪郭
@@ -426,7 +438,9 @@ def main(root, today_s, out_path, fixed_path=None):
                     note += f' {esc(t["owner"])}・未依頼'
                 else:
                     note += " " + esc(t["owner"])
-            parts.append(note_text(x1 + 5, y, note))
+            # ゴールは外枠が3単位外側まで出るので、それも避けられる位置を渡す
+            mgn = 3.5 if is_goal else 0.5
+            parts.append(note_text(x1 + 5, y, note, x0 - mgn, x1 + mgn))
 
         title = (anchor.get("src_no") or anchor["id"]) + " " + anchor.get("title", "")
         # 残子タスク数バッジ（2026/08/13）: done/dropped 以外を「残」と数える（droppedは読込時点で除外済み）
@@ -533,6 +547,8 @@ def main(root, today_s, out_path, fixed_path=None):
 body {{ margin:0; font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; }}
 .viz-root {{ background:var(--surface-1); color:var(--text-primary); min-height:100vh;
   padding:24px; max-width:960px; margin:0 auto; }}
+/* 狭い画面は左右余白を詰めて、タイムラインに使える幅を稼ぐ（2026/08/16 レビュー重大3） */
+@media (max-width:520px) {{ .viz-root {{ padding:12px; }} }}
 h1 {{ font-size:20px; margin:0 0 2px; }}
 .stamp {{ color:var(--text-secondary); font-size:12px; margin-bottom:20px; }}
 h2 {{ font-size:15px; margin:26px 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; }}
@@ -593,13 +609,13 @@ ul.dim li {{ opacity:0.5; }}
 .todayline {{ stroke:#2a78d6; stroke-width:1.5; stroke-dasharray:3 3; }}
 .dep {{ fill:none; stroke:var(--text-secondary); stroke-width:1.1; opacity:0.75; }}
 .dephead {{ fill:var(--text-secondary); opacity:0.75; }}
-.ax {{ font-size:12px; fill:var(--text-secondary); }}
-.lbl {{ font-size:13px; fill:var(--text-primary); }}
+.ax {{ font-size:13px; fill:var(--text-secondary); }}
+.lbl {{ font-size:14px; fill:var(--text-primary); }}
 .lbl.tl-done, .lbl.tl-wait {{ fill:var(--text-secondary); }}
 .tlblock {{ margin:10px 0 16px; }}
 /* viewBoxを470まで詰めたので、375pxでも横スクロール無しで全体が入る。
    デスクトップで間延びしないよう上限を置く（2026/08/16 レビュー反映） */
-.tlblock svg {{ width:100%; max-width:560px; display:block; }}
+.tlblock svg {{ width:100%; max-width:620px; display:block; }}
 .tlhead {{ font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; margin-bottom:2px; }}
 .parentref {{ color:var(--text-secondary); font-size:10.5px; margin-left:2px; }}
 .tlbadge {{ font-size:11px; font-weight:normal; color:var(--text-secondary);

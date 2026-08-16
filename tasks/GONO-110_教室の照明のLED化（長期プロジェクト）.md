@@ -2,6 +2,7 @@
 id: GONO-110
 org: 郷野の郷
 title: 教室の照明のLED化（長期プロジェクト）
+short: 教室のLED化
 status: todo
 role: do
 due: 

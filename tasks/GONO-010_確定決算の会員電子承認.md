@@ -2,6 +2,7 @@
 id: GONO-010
 org: 郷野の郷
 title: 確定決算の会員電子承認
+short: 臨時総会（承認）
 status: todo
 role: do
 due: 2026/08/30

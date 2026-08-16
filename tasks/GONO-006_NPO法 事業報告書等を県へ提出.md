@@ -2,6 +2,7 @@
 id: GONO-006
 org: 郷野の郷
 title: NPO法 事業報告書等を県へ提出
+short: 事業報告書等を県へ
 status: todo
 role: do
 due: 2026/08/31

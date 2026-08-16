@@ -2,6 +2,7 @@
 id: GONO-011
 org: 郷野の郷
 title: 確定決算に対する監事監査
+short: 監事監査
 status: todo
 role: monitor
 due: 2026/08/21
