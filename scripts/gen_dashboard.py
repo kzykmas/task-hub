@@ -269,9 +269,12 @@ def main(root, today_s, out_path, fixed_path=None):
         span = max((end - start).days, 7)
         W, LBL, RH, PAD = 660, 230, 26, 8
         H = len(rows) * RH + 34
+        # 右端はボックス右の注記（日付・担当）を書くため広めに空ける。
+        # 空けないと最終日のラベルが「08/3」のように切れる（2026/08/16 実表示で確認）
+        RGT = 86
         def x(dt):
-            return LBL + (dt - start).days / span * (W - LBL - 12)
-        dayw = max((W - LBL - 12) / span, 11)   # 1日分の幅（細すぎると見えないので下限を置く）
+            return LBL + (dt - start).days / span * (W - LBL - RGT)
+        dayw = max((W - LBL - RGT) / span, 11)   # 1日分の幅（細すぎると見えないので下限を置く）
         parts = []
         monthly = span > 70
         dd = start
