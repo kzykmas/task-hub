@@ -6,8 +6,8 @@ short: ホダ木の浸水
 status: todo
 labor: physical
 role: do
-today: 2026/08/17
-due: 2026/08/17
+today: 
+due: 2026/08/22
 reason: 
 later: 
 owner: 
@@ -24,3 +24,4 @@ done_date:
 ## 経緯
 - 2026/08/16 増野さん指示で起票。今日やるタスクとして追加。
 - 2026/08/16 今日は手をつけられず、明日（8/17）へ。today・due を更新。
+- 2026/08/17 増野さん指示で **8/22まで延期**。today は解除。
