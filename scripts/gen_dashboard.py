@@ -25,7 +25,8 @@ ORG_COLORS = {  # dataviz検証済みパレット
     "未分類":      "#8a8984",
     "家族・個人":  "#8a8984",
 }
-REASON_STYLE = {"法令期限": "#d63031", "安全": "#e67e22", "資金": "#16806e"}
+# 法令期限は期日の赤チップと紛らわしかったため、明るい紫に変更（2026/08/16 増野さん指示）
+REASON_STYLE = {"法令期限": "#a855c7", "安全": "#e67e22", "資金": "#16806e"}
 THIS_WEEK_LIMIT = 7   # 重タスク（1時間以上の検討・調整・検証）の上限。2026/08/06 5→7（増野の実績と7±2）
 LIGHT_LIMIT = 10      # 軽タスク（1時間未満の発注・連絡など。size: light）の目安。2026/08/08 新設
 TIMELINE_DAYS = 150  # 企画タイムラインの窓（2026/08/07 60→150。11月開催の講習会の準備連鎖を見るため）
@@ -181,6 +182,13 @@ def main(root, today_s, out_path, fixed_path=None):
         orgs_tasks.setdefault(t["org"], []).append(t)
 
     # ---- 部品 ----
+    # 表示名の上限。実データ183件の分布（中央値14・75%点18.1）と、
+    # iPhone実測（375px幅・囲み枠の内側で使えるのは約157px＝全角14文字）から全角13文字とした。
+    # 15文字だと囲み枠（至急・今日やるつもり・待ち）の中で折り返す（2026/08/16 実測）
+    NAME_CAP = 13.0
+    def _wide(ss):
+        return sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in ss)
+
     def h2(title, note=""):
         # 見出し＋（?）で開く注釈。表示を絞り、説明はクリックで出す（2026/08/09）
         n = f'<details class="hint"><summary>?</summary><div>{note}</div></details>' if note else ""
@@ -194,15 +202,16 @@ def main(root, today_s, out_path, fixed_path=None):
         if t.get("later") == "true":
             parts.append('<span class="chip gray">あとで</span>')
         if t.get("owner"):
-            parts.append(f'<span class="chip blue">{esc(t["owner"])}</span>')
+            parts.append(f'<span class="chip blue" title="担当: {esc(t["owner"])}">{esc(t["owner"])}</span>')
         # 待ちタスクの状態（2026/08/16）：タスク名が行為（「〜連絡」）だと、こちらが未着手に見える。
         # 「依頼済み・待ちN日目」を出して、自分の手は離れていることを一目で分かるようにする
         if t.get("status") == "waiting":
             ad = d(t.get("asked", ""))
             if ad:
                 wn = max((today - ad).days, 0)
-                lab = f'⏳依頼済み・待ち{wn}日目' if wn > 0 else '⏳依頼済み（今日）'
-                parts.append(f'<span class="chip gray">{lab}</span>')
+                # 幅を食うので短く。意味は title 属性で補う（2026/08/16 実測でこの行だけ溢れた）
+                lab = f'⏳待ち{wn}日' if wn > 0 else '⏳依頼済み'
+                parts.append(f'<span class="chip gray" title="依頼済み。相手の回答待ち{wn}日目">{lab}</span>')
             else:
                 parts.append('<span class="chip" style="background:#d63031">未依頼</span>')
         return "".join(parts)
@@ -212,15 +221,16 @@ def main(root, today_s, out_path, fixed_path=None):
         n = (dd - today).days
         cls = "red" if n <= 0 else ("orange" if n <= 3 else ("yellow" if n <= 14 else "plain"))
         mark = "↩" if t.get("_derived") else ""
-        return f'<span class="due {cls}">{mark}{t["due"]}</span>'
+        # MM/DD で足りる（年は今の運用では紛れない）。行の右端に揃えるのは CSS 側（.due{margin-left:auto}）
+        return f'<span class="due {cls}">{mark}{t["due"][5:]}</span>'
     def parentref(t):
         # 親企画の短縮名を控えめに添える（2026/08/13 新設）。参照切れは無視
         par = idx.get(t.get("parent", ""))
         if not par:
             return ""
         name = par.get("short") or par.get("title", "")
-        if len(name) > 12:
-            name = name[:12] + "…"
+        if len(name) > 8:
+            name = name[:8] + "…"
         no = par.get("src_no") or par["id"]
         return f'<span class="parentref">⟵ {esc(no)} {esc(name)}</span>'
 
@@ -235,8 +245,16 @@ def main(root, today_s, out_path, fixed_path=None):
         wip = ('<span class="wip" title="仕掛かり中">🚧</span>' if t.get("status") == "doing" else
                '<span class="wip" title="事前調査">🔍</span>' if t.get("status") == "research" else "")
         pref = parentref(t) if show_parent else ""
-        out = (f'<li{cls}>{mark}{org}<span class="tid">{esc(no)}</span>{wip}{ph} {esc(t.get("title", ""))}{pref} '
-               f'{duetag(t)}{chip(t)}</li>')
+        # 長い名前で行が折り返すのを防ぐ。**固定文字数で切らず CSS 側で省略**する
+        # （画面幅に応じて入るだけ表示され、iPhoneでは短く、デスクトップでは長く出る）。
+        # 全文は title 属性（マウスオン／長押し）で読める（2026/08/16 増野さん指示）
+        full = t.get("title", "")
+        disp = full
+        tt = f' title="{esc(full)}"'
+        # 期日は chip より後ろに置く。CSS の margin-left:auto で行の右端に揃う
+        out = (f'<li{cls}>{mark}{org}<span class="tid">{esc(no)}</span>{wip}{ph} '
+               f'<span class="ttl"{tt}>{esc(disp)}</span>{pref} '
+               f'{chip(t)}{duetag(t)}</li>')
         if not child and expand:
             for c in sorted(children.get(t["id"], []), key=lambda x: x.get("due", "")):
                 out += row(c, show_org, child=True)
@@ -549,7 +567,11 @@ body {{ margin:0; font-family:-apple-system,"Hiragino Sans","Noto Sans JP",sans-
 .viz-root {{ background:var(--surface-1); color:var(--text-primary); min-height:100vh;
   padding:24px; max-width:960px; margin:0 auto; }}
 /* 狭い画面は左右余白を詰めて、タイムラインに使える幅を稼ぐ（2026/08/16 レビュー重大3） */
-@media (max-width:520px) {{ .viz-root {{ padding:12px; }} }}
+@media (max-width:520px) {{
+  .viz-root {{ padding:12px; }}
+  /* 親参照は幅を最も食う（実測202px＝タイトルより広い）。狭い画面では隠して1行に収める */
+  .parentref {{ display:none; }}
+}}
 h1 {{ font-size:20px; margin:0 0 2px; }}
 .stamp {{ color:var(--text-secondary); font-size:12px; margin-bottom:20px; }}
 h2 {{ font-size:15px; margin:26px 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; }}
@@ -557,12 +579,23 @@ h3 {{ font-size:14px; margin:0 0 4px; display:flex; align-items:center; gap:8px;
 .counts {{ font-weight:normal; color:var(--text-secondary); font-size:12px; margin-left:auto; }}
 ul {{ list-style:none; margin:6px 0; padding:0; }}
 li {{ padding:5px 2px; font-size:13.5px; border-bottom:1px dotted var(--line);
-  display:flex; align-items:center; gap:7px; flex-wrap:wrap; }}
+  display:flex; align-items:center; gap:7px; flex-wrap:nowrap; }}
+/* 縮むのはタイトルだけ。他は自然な幅を保つ。タイトルは入るだけ表示し、
+   はみ出す分は … に畳んで title 属性（マウスオン）で全文を読む（2026/08/16） */
+.ttl {{ flex:1 1 auto; min-width:3.5em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+li > .orgdot, li > .tid, li > .due, li > .phys, li > .wip,
+li > .sub-mark, li > .parentref {{ flex:0 0 auto; }}
+/* チップが2つ以上付く行（担当＋待ち日数など）は、最後の手段としてチップ側も縮める。
+   全文は title 属性で読める（2026/08/16 実測。GONO-130 の1行だけ溢れていた） */
+li > .chip {{ flex:0 1 auto; min-width:2.6em; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.parentref {{ max-width:38%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
 li.child {{ padding-left:18px; }}
 .sub-mark {{ color:var(--text-secondary); font-size:12px; }}
 .tid {{ font-family:ui-monospace,monospace; font-size:11.5px; color:var(--text-secondary);
   background:var(--surface-2); padding:1px 5px; border-radius:4px; }}
 .chip {{ color:#fff; font-size:11px; padding:1px 7px; border-radius:9px; }}
+/* 期日は margin-left:auto で右端へ。チップ（法令期限・担当など）はその左に並ぶよう、
+   row() での並び順を chip → due に変更した（2026/08/16 増野さん指示） */
 .chip.gray {{ background:var(--surface-2); color:var(--text-secondary); }}
 .chip.blue {{ background:#5286cc33; color:#3a6db3; }}
 .phys {{ font-size:12px; margin-left:1px; cursor:help; }}
