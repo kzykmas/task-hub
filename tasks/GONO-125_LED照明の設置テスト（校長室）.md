@@ -3,11 +3,10 @@ id: GONO-125
 org: 郷野の郷
 title: LED照明の設置テスト（校長室）
 short: 設置テスト
-status: todo
+status: done
 size: light
 labor: physical
 role: do
-today: 2026/08/17
 due: 2026/08/17
 reason: 
 later: 
@@ -18,7 +17,7 @@ src_no:
 parent: GONO-110
 project: 
 created: 2026/08/12
-done_date: 
+done_date: 2026/08/16
 ---
 
 # GONO-125 LED照明の設置テスト（校長室）
@@ -38,3 +37,4 @@ GONO-126（検品）の後、GONO-123（試験点灯・評価）の前。
   順序は設置テスト→評価なので、実際には8/31より前に設置テストを終える必要がある。要確認。
 - 2026/08/16 増野さん指示で **明日（8/17）、GONO-123（試験点灯・評価）と一気にやる**ことに決定。
   due を 8/31 → 8/17 に変更。
+- 2026/08/17 増野さん報告により **昨日（8/16）完了**と判明。done_date を 8/16 に設定。
