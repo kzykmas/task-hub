@@ -268,7 +268,10 @@ def main(root, today_s, out_path, fixed_path=None):
                f'<span class="ttl"{tt}>{esc(disp)}</span>{pref} '
                f'{chip(t)}{duetag(t)}</li>')
         if not child and expand:
+            # 完了した子タスクは展開しない（2026/08/18 増野さん指摘）。
+            # 親が残っているだけで、終わった子まで「これから1週間でやる」に並んでいた
             for c in sorted(children.get(t["id"], []), key=lambda x: x.get("due", "")):
+                if c.get("status") == "done": continue
                 out += row(c, show_org, child=True)
         return out
 
