@@ -137,7 +137,8 @@ def compute(root, today_s, fixed_path=None):
     # ---- 今日やるつもり（2026/08/15 新設）----
     # today: yyyy/mm/dd → その日に着手するつもりのもの。「至急（やらねばならない）」とは別の、
     # 増野さん自身の意思の枠。日付で持つので、翌日には自動で外れる（外し忘れが残らない）。
-    # 至急と重複しても両方に出す：この節だけ見れば今日の作業が全部わかる状態を優先する。
+    # 至急と重複した場合は重複排除（uniq）により至急側だけに出る
+    # （2026/08/16 増野さん決定「上の節を優先し1回だけ」。旧コメント「両方に出す」は初期案の名残だった）。
     today_plan = sorted([t for t in tasks if t.get("status") not in ("done", "dropped")
                          and t.get("today") == today_s],
                         key=lambda t: (t.get("due") or "9999/99/99", t.get("id")))

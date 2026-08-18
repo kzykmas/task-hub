@@ -157,7 +157,7 @@ def main(root, today_s, out_path, fixed_path=None):
         L.append("対象の企画はありません。")
     L.append("")
     L.append("---")
-    L.append("団体別ボード・タイムライン詳細はPC版（dashboard.html）で。正本は各団体の tasks/ ノート。")
+    L.append("団体別ボード・タイムライン詳細はPC版（index.html）で。正本は task-hub の tasks/ ノート。")
     L.append("")
 
     open(out_path, "w", encoding="utf-8").write("\n".join(L))

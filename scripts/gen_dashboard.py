@@ -30,12 +30,6 @@ def main(root, today_s, out_path, fixed_path=None):
         orgs_tasks.setdefault(t["org"], []).append(t)
 
     # ---- 部品 ----
-    # 表示名の上限。実データ183件の分布（中央値14・75%点18.1）と、
-    # iPhone実測（375px幅・囲み枠の内側で使えるのは約157px＝全角14文字）から全角13文字とした。
-    # 15文字だと囲み枠（至急・今日やるつもり・待ち）の中で折り返す（2026/08/16 実測）
-    NAME_CAP = 13.0
-    _wide = wide
-
     def h2(title, note=""):
         # 見出し＋（?）で開く注釈。表示を絞り、説明はクリックで出す（2026/08/09）
         n = f'<details class="hint"><summary>?</summary><div>{note}</div></details>' if note else ""
@@ -550,7 +544,7 @@ ul.dim li {{ opacity:0.5; }}
 {h2('🗂 団体別ボード', '期限の近い順（監視・あとでを除く）＋バックログ（期限なし）＋監視中。全件は task-hub の tasks/ にある。')}
 <div class="grid2">{org_cards}</div>
 
-<p class="note" style="margin-top:22px">設計: docs/タスク管理_設計書.md ｜ 更新は Cowork に「ダッシュボード更新して」｜ 配分・負荷の推移は「PM研究ボード」</p>
+<p class="note" style="margin-top:22px">仕様: docs/仕様書_v1.0.md ｜ 設計: docs/設計書_v1.0.md ｜ 更新はローカルCodeセッションで scripts/update.sh</p>
 </div></body></html>"""
     open(out_path, "w", encoding="utf-8").write(page)
     print(f"tasks={len(tasks)} thisweek={len(tw_heavy)}重+{len(tw_light)}軽 timelines={len(anchors)} "
