@@ -129,8 +129,13 @@ def compute(root, today_s, fixed_path=None):
     def is_urgent_today(t):
         u = t.get("urgent", "")
         return u == "true" or u == today_s
+    # 他人の担当（monitor）と日次見回り（daily）は至急に出さない（2026/08/19 増野さん決定）。
+    # 1週間枠と同じ基準に揃え、これらは「監視の期日」に任せる。
+    # 揃える前は監視タスクの due が今日だと至急に混ざり、自分の作業量が実態より多く見えていた
     urgent = sorted([t for t in tasks if t.get("status") not in ("done", "waiting")
                      and t.get("timebound") != "true"
+                     and t.get("role") != "monitor"
+                     and t.get("check_cycle") != "daily"
                      and (t.get("due") == today_s or is_urgent_today(t))],
                     key=lambda t: (t.get("size") == "light", t.get("id")))
 
