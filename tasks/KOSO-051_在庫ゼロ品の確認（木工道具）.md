@@ -3,9 +3,8 @@ id: KOSO-051
 org: 構想P
 title: 在庫ゼロ品の確認（木工道具）
 short: 在庫ゼロ品確認
-status: todo
+status: done
 role: do
-today: 2026/08/18
 due: 2026/08/18
 reason: 
 later: 
@@ -13,7 +12,7 @@ owner:
 parent: KOSO-014
 project: 20260708_森の散策と木工教室
 created: 2026/08/18
-done_date: 
+done_date: 2026/08/18
 ---
 
 # KOSO-051 在庫ゼロ品の確認（木工道具）
@@ -26,3 +25,4 @@ KOSO-014（木工教室 道具の選定・購入）の一部。在庫ゼロで�
 
 ## 経緯
 - 2026/08/18 増野さん指示で起票。本日の作業として設定。
+- 2026/08/18 **完了**（増野さん報告）。
