@@ -84,9 +84,21 @@ def main(root, today_s, out_path, fixed_path=None):
         if t.get("parent"):
             children.setdefault(t["parent"], []).append(t)
 
-    # ---- 今週やる（自由・準備のみ。size: light で重/軽に2分。2026/08/08）----
-    this_week = sorted([t for t in tasks if t.get("status") == "this_week"
-                        and t.get("timebound") != "true"],
+    # ---- これから1週間でやる（2026/08/18 自動化）----
+    # 期限が3日以内（期限切れを含む）のタスクは**自動で**この枠に入る。
+    # 手で this_week を付ける運用が追いつかず、枠が空のまま期限タスクが走る状態になっていたため。
+    # 7枚制限は「守る上限」から「超えたら期限を見直すきっかけ」に役割を変えた（増野さん決定・案A）。
+    # 期限の無いものは従来どおり status: this_week で手動指定できる。
+    AUTO_WEEK_DAYS = 3
+    def in_this_week(t):
+        if t.get("status") in ("done", "dropped", "waiting"): return False
+        if t.get("timebound") == "true": return False      # 拘束は「2週間ある」で見る
+        if t.get("status") == "this_week": return True     # 手動指定は期限に関係なく入る
+        if t.get("role") == "monitor": return False        # 他人の担当は「監視の期日」で見る
+        if t.get("check_cycle") == "daily": return False   # 日次見回りも「監視の期日」
+        dd = d(t.get("due", ""))
+        return bool(dd) and (dd - today).days <= AUTO_WEEK_DAYS
+    this_week = sorted([t for t in tasks if in_this_week(t)],
                        key=lambda t: t.get("due") or "9999/99/99")
     tw_heavy = [t for t in this_week if t.get("size") != "light"]
     tw_light = [t for t in this_week if t.get("size") == "light"]
@@ -694,13 +706,15 @@ ul.dim li {{ opacity:0.5; }}
 {'<p class="note">待ちのタスクはありません。</p>' if not v_waiting else ''}
 
 {h2(f'⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）',
-    '1時間以上の検討・調整・検証。タスクノートの size: light が無印のもの。拘束（timebound）は「2週間ある」で見る。')}
-{f'<div class="warn">重タスクが{THIS_WEEK_LIMIT}枚制限を超えています。減らしてください。</div>' if over_limit else ''}
+    '1時間以上の検討・調整・検証。**期限3日以内（期限切れを含む）は自動で入る**。'
+    '期限の無いものは status: this_week で手動指定。7枚は上限ではなく、超えたら期限を見直す合図。'
+    '拘束（timebound）は「2週間ある」、他人の担当と日次見回りは「監視の期日」で見る。')}
+{f'<div class="warn">重タスクが{len(tw_heavy)}枚（目安{THIS_WEEK_LIMIT}枚）。<b>期限を見直すきっかけです。</b>動かせる期日を先へ、相手に振れるものは owner へ。</div>' if over_limit else ''}
 {"".join(f'<div class="warn">⚠ 逆算期日が過ぎています: {esc(t["id"])} {esc(t["title"])}（期日{t["due"]}）。親の日付を動かすか、準備を削るかを決めてください。</div>' for t in lead_broken)}
 <ul>{"".join(row(t, True, show_parent=True) for t in v_tw_heavy)}</ul>{omitted(v_tw_heavy, tw_heavy)}
 
 {h2(f'🔹 これから1週間でやる — 軽（{len(tw_light)}/{LIGHT_LIMIT}）',
-    '1時間未満の発注・連絡など。タスクノートに size: light を書いたもの。')}
+    '1時間未満の発注・連絡など。タスクノートに size: light を書いたもの。重と同じく期限3日以内は自動で入る。')}
 {f'<div class="warn">軽タスクが{LIGHT_LIMIT}件の目安を超えています。すき間時間で消化するか、先送りを検討。</div>' if over_light else ''}
 <ul>{"".join(row(t, True, show_parent=True) for t in v_tw_light)}</ul>{omitted(v_tw_light, tw_light)}
 

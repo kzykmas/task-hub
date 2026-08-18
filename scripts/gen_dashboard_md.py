@@ -68,8 +68,21 @@ def main(root, today_s, out_path, fixed_path=None):
             children.setdefault(t["parent"], []).append(t)
 
     # ---- 分類（HTML版と同一）----
-    this_week = sorted([t for t in tasks if t.get("status") == "this_week"
-                        and t.get("timebound") != "true"],
+    # ---- これから1週間でやる（2026/08/18 自動化）----
+    # 期限が3日以内（期限切れを含む）のタスクは**自動で**この枠に入る。
+    # 手で this_week を付ける運用が追いつかず、枠が空のまま期限タスクが走る状態になっていたため。
+    # 7枚制限は「守る上限」から「超えたら期限を見直すきっかけ」に役割を変えた（増野さん決定・案A）。
+    # 期限の無いものは従来どおり status: this_week で手動指定できる。
+    AUTO_WEEK_DAYS = 3
+    def in_this_week(t):
+        if t.get("status") in ("done", "dropped", "waiting"): return False
+        if t.get("timebound") == "true": return False      # 拘束は「2週間ある」で見る
+        if t.get("status") == "this_week": return True     # 手動指定は期限に関係なく入る
+        if t.get("role") == "monitor": return False        # 他人の担当は「監視の期日」で見る
+        if t.get("check_cycle") == "daily": return False   # 日次見回りも「監視の期日」
+        dd = d(t.get("due", ""))
+        return bool(dd) and (dd - today).days <= AUTO_WEEK_DAYS
+    this_week = sorted([t for t in tasks if in_this_week(t)],
                        key=lambda t: t.get("due") or "9999/99/99")
     tw_heavy = [t for t in this_week if t.get("size") != "light"]
     tw_light = [t for t in this_week if t.get("size") == "light"]
@@ -238,7 +251,7 @@ def main(root, today_s, out_path, fixed_path=None):
 
     L.append(f"## ⭐ これから1週間でやる — 重（{len(tw_heavy)}/{THIS_WEEK_LIMIT}）")
     if len(tw_heavy) > THIS_WEEK_LIMIT:
-        L.append(f"⚠️ **重タスクが{THIS_WEEK_LIMIT}枚制限を超過。減らすこと。**")
+        L.append(f"⚠️ **重タスクが{len(tw_heavy)}枚（目安{THIS_WEEK_LIMIT}枚）。期限を見直すきっかけです。**")
     for t in lead_broken:
         L.append(f"⚠️ 逆算期日切れ: {t['id']} {t.get('title','')}（期日{t['due']}）")
     for t in v_tw_heavy: L.append(line(t, parent=True))
