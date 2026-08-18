@@ -7,187 +7,23 @@ tasks/（全団体フラット）と fixed.json（★付きカレンダー予定
 
 構成: 2週間ある（今日起点14日）／これから1週間でやる／期限アラート／監視の期日／企画タイムライン／団体別ボード
 「先の拘束」は廃止（Googleカレンダーで見る）。配分・負荷は gen_pm_board.py（PM研究ボード）へ移行。
+データ読込・節の振り分けは boardlib.py（2026/08/19 リファクタで抽出）。ここは描画のみ。
 
 使い方: python3 gen_dashboard.py <リポルート> <today yyyy/mm/dd> <out.html> [fixed.json]
 """
-import sys, os, re, json, glob, datetime, html
+import sys, re, datetime, html
 
-ORG_COLORS = {  # dataviz検証済みパレット
-    "郷野の郷":    "#2a78d6",
-    "構想P":       "#eb6834",
-    "STREAM":      "#1baf7a",
-    "安全学校":    "#e34948",
-    "向原小・PTA": "#eda100",
-    "PMS":         "#e87ba4",
-    "サッカー":    "#008300",
-    "個人・AI":    "#4a3aa7",
-    "AI改善":      "#4a3aa7",   # 個人・AIと同系（負荷集計上も同一カテゴリ）
-    "未分類":      "#8a8984",
-    "家族・個人":  "#8a8984",
-}
-# 法令期限は期日の赤チップと紛らわしかったため、明るい紫に変更（2026/08/16 増野さん指示）
-REASON_STYLE = {"法令期限": "#a855c7", "安全": "#e67e22", "資金": "#16806e"}
-THIS_WEEK_LIMIT = 7   # 重タスク（1時間以上の検討・調整・検証）の上限。2026/08/06 5→7（増野の実績と7±2）
-LIGHT_LIMIT = 10      # 軽タスク（1時間未満の発注・連絡など。size: light）の目安。2026/08/08 新設
-TIMELINE_DAYS = 150  # 企画タイムラインの窓（2026/08/07 60→150。11月開催の講習会の準備連鎖を見るため）
-WD = ["月", "火", "水", "木", "金", "土", "日"]
+from boardlib import (ORG_COLORS, REASON_STYLE, THIS_WEEK_LIMIT, LIGHT_LIMIT,
+                      TIMELINE_DAYS, WD, d, wide, compute)
 
-def parse_note(path):
-    txt = open(path, encoding="utf-8").read()
-    m = re.match(r"^---\n(.*?)\n---", txt, re.S)
-    if not m:
-        return None
-    fm = {}
-    for line in m.group(1).splitlines():
-        if ":" in line:
-            k, v = line.split(":", 1)
-            fm[k.strip()] = v.strip()
-    fm["_file"] = os.path.basename(path)
-    return fm
-
-def d(s):
-    return datetime.date(*map(int, s.split("/"))) if s else None
-
-def load_tasks(root):
-    tasks = []
-    for p in sorted(glob.glob(os.path.join(root, "tasks", "*.md"))):
-        if os.path.basename(p).startswith("_"):
-            continue
-        fm = parse_note(p)
-        if fm and fm.get("id") and fm.get("status") != "dropped":
-            tasks.append(fm)
-    # 読み込み順に依存しないよう id で確定させる（同着の並びがフォルダ構成で変わるのを防ぐ）
-    tasks.sort(key=lambda t: t.get("id", ""))
-    return tasks
 
 def main(root, today_s, out_path, fixed_path=None):
-    today = d(today_s)
-    fixed = json.load(open(fixed_path, encoding="utf-8"))["events"] if fixed_path else []
-    tasks = load_tasks(root)
+    B = compute(root, today_s, fixed_path)
+    today, tasks, idx, children = B.today, B.tasks, B.idx, B.children
+    days, by_day = B.days, B.by_day
+    tw_heavy, tw_light, tw_phys = B.tw_heavy, B.tw_light, B.tw_phys
+    load_score, load_level, load_col = B.load_score, B.load_level, B.load_col
     esc = html.escape
-
-    # ---- lead 逆算（§3-5）----
-    idx = {t["id"]: t for t in tasks}
-    lead_broken = []
-    for t in tasks:
-        lg = re.match(r"(\d+)d", t.get("lead", "") or "")
-        par = idx.get(t.get("parent", ""))
-        if lg and par and par.get("due"):
-            derived = d(par["due"]) - datetime.timedelta(days=int(lg.group(1)))
-            t["due"] = derived.strftime("%Y/%m/%d")
-            t["_derived"] = True
-            if derived < today and t.get("status") != "done":
-                lead_broken.append(t)
-
-    children = {}
-    for t in tasks:
-        if t.get("parent"):
-            children.setdefault(t["parent"], []).append(t)
-
-    # ---- これから1週間でやる（2026/08/18 自動化）----
-    # 期限が3日以内（期限切れを含む）のタスクは**自動で**この枠に入る。
-    # 手で this_week を付ける運用が追いつかず、枠が空のまま期限タスクが走る状態になっていたため。
-    # 7枚制限は「守る上限」から「超えたら期限を見直すきっかけ」に役割を変えた（増野さん決定・案A）。
-    # 期限の無いものは従来どおり status: this_week で手動指定できる。
-    AUTO_WEEK_DAYS = 3
-    def in_this_week(t):
-        if t.get("status") in ("done", "dropped", "waiting"): return False
-        if t.get("timebound") == "true": return False      # 拘束は「2週間ある」で見る
-        if t.get("status") == "this_week": return True     # 手動指定は期限に関係なく入る
-        if t.get("role") == "monitor": return False        # 他人の担当は「監視の期日」で見る
-        if t.get("check_cycle") == "daily": return False   # 日次見回りも「監視の期日」
-        dd = d(t.get("due", ""))
-        return bool(dd) and (dd - today).days <= AUTO_WEEK_DAYS
-    this_week = sorted([t for t in tasks if in_this_week(t)],
-                       key=lambda t: t.get("due") or "9999/99/99")
-    tw_heavy = [t for t in this_week if t.get("size") != "light"]
-    tw_light = [t for t in this_week if t.get("size") == "light"]
-
-    # ---- 負荷スコア（2026/08/09 新設）: 重=1・軽=0.5、合計7が基準 ----
-    load_score = len(tw_heavy) + 0.5 * len(tw_light)
-    if load_score > 10:
-        load_level, load_col = "⚠ 警戒（過負荷）", "#d63031"
-    elif load_score > 7:
-        load_level, load_col = "注意", "#e67e22"
-    elif load_score >= 5:
-        load_level, load_col = "正常", "#1baf7a"
-    else:
-        load_level, load_col = "リラックス", "#2a78d6"
-    # 肉体作業（labor: physical）のアドバイス。1日1回を目安に織り交ぜる
-    tw_phys = [t for t in this_week if t.get("labor") == "physical"]
-
-    # ---- 至急 — 今日やる（2026/08/08 新設・2026/08/10 urgentに日付指定を追加）----
-    # urgent: true → 恒常的に至急扱い／urgent: yyyy/mm/dd → その日だけ至急扱い（「明日に先送り」等に使う）
-    def is_urgent_today(t):
-        u = t.get("urgent", "")
-        return u == "true" or u == today_s
-    urgent = sorted([t for t in tasks if t.get("status") not in ("done", "waiting")
-                     and t.get("timebound") != "true"
-                     and (t.get("due") == today_s or is_urgent_today(t))],
-                    key=lambda t: (t.get("size") == "light", t.get("id")))
-
-    # ---- 今日やるつもり（2026/08/15 新設）----
-    # today: yyyy/mm/dd → その日に着手するつもりのもの。「至急（やらねばならない）」とは別の、
-    # 増野さん自身の意思の枠。日付で持つので、翌日には自動で外れる（外し忘れが残らない）。
-    # 至急と重複しても両方に出す：この節だけ見れば今日の作業が全部わかる状態を優先する。
-    today_plan = sorted([t for t in tasks if t.get("status") not in ("done", "dropped")
-                         and t.get("today") == today_s],
-                        key=lambda t: (t.get("due") or "9999/99/99", t.get("id")))
-
-    # ---- 2週間ある（今日起点14日）: ★付き予定 + timeboundタスク ----
-    days = [today + datetime.timedelta(days=i) for i in range(14)]
-    by_day = {dd.strftime("%Y/%m/%d"): [] for dd in days}
-    for e in fixed:
-        if e["date"] in by_day:
-            by_day[e["date"]].append(e)
-    for t in tasks:
-        if t.get("timebound") == "true" and t.get("due") in by_day and t.get("status") != "done":
-            by_day[t["due"]].append({"date": t["due"], "start": "終日", "end": "",
-                                     "label": t.get("title", ""), "org": t["org"]})
-    undated = [t for t in tasks if t.get("timebound") == "true" and t.get("undated") == "true"
-               and t.get("status") != "done"]
-
-    # ---- 期限アラート ----
-    def bucket(t):
-        dd = d(t.get("due", ""))
-        # waiting（相手の作業・納品待ち）はアラートから外す。自分が動けないタスクを急かさないため。
-        # 見失わないよう、HTMLは団体別ボード、mdは「待ち」節に残す（2026/08/14 増野さん決定）
-        if not dd or t.get("status") in ("done", "waiting"): return None
-        if t.get("timebound") == "true": return None  # 拘束は2週間ある/カレンダーで見る
-        # 日次の見回り（check_cycle: daily）は期限アラートに出さない。
-        # due は「毎日やるのを終える日」であって締切ではなく、「監視の期日」で毎朝見るものだから
-        # （2026/08/16。重複排除で期限アラートに吸われ、監視に出なくなっていたのを修正）
-        if t.get("check_cycle") == "daily": return None
-        n = (dd - today).days
-        if n < 0: return "overdue"
-        if n <= 3: return "d3"
-        if n <= 14: return "d14"
-        return None
-    alerts = {"overdue": [], "d3": [], "d14": []}
-    for t in tasks:
-        b = bucket(t)
-        if b: alerts[b].append(t)
-    for k in alerts: alerts[k].sort(key=lambda t: t["due"])
-
-    monitors = sorted([t for t in tasks if t.get("role") == "monitor"],
-                      key=lambda t: (t.get("next_check", "9999"), t.get("due", "")))
-    mon_due = [t for t in monitors if d(t.get("next_check", "")) and (d(t["next_check"]) - today).days <= 7]
-
-    # 相手の作業・納品待ち。期限アラートから外した分をここで拾い、見失わないようにする（2026/08/14）
-    waiting_list = sorted([t for t in tasks if t.get("status") == "waiting"],
-                          key=lambda t: t.get("due") or "9999/99/99")
-
-    # 待ちの重要度（2026/08/15 増野さん決定）。毎朝まずチェックする節なので、
-    # 「今すぐ気にすべきもの」と「まだ寝かせてよいもの」を見た目で分ける。
-    #   wait: important → 常に重要／wait: light → 常に軽度
-    #   無印 → 期限の1週間前を切ったら重要、それより先なら軽度（自動判定）
-    def wait_is_important(t):
-        w = t.get("wait", "")
-        if w == "important": return True
-        if w == "light": return False
-        dd = d(t.get("due", ""))
-        if not dd: return False
-        return (dd - today).days <= 7
 
     orgs_tasks = {}
     for t in tasks:
@@ -198,8 +34,7 @@ def main(root, today_s, out_path, fixed_path=None):
     # iPhone実測（375px幅・囲み枠の内側で使えるのは約157px＝全角14文字）から全角13文字とした。
     # 15文字だと囲み枠（至急・今日やるつもり・待ち）の中で折り返す（2026/08/16 実測）
     NAME_CAP = 13.0
-    def _wide(ss):
-        return sum(0.55 if ord(c) < 0x2E80 else 1.0 for c in ss)
+    _wide = wide
 
     def h2(title, note=""):
         # 見出し＋（?）で開く注釈。表示を絞り、説明はクリックで出す（2026/08/09）
@@ -488,16 +323,7 @@ def main(root, today_s, out_path, fixed_path=None):
                 f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{esc(title)} のタイムライン">'
                 + "".join(parts) + "</svg></div>")
 
-    # 2026/08/10: timebound に限らず「期日を持ち細目がある親」を載せる（例: 役員重任登記）。
-    # 窓の判定は親自身の期日 or 細目の最遅期日のどちらかが範囲内なら可
-    def tl_ok(t):
-        if not children.get(t["id"]) or t.get("status") == "done": return False
-        dues = [d(x["due"]) for x in [t] + children[t["id"]] if x.get("due")]
-        return bool(dues) and 0 <= (max(dues) - today).days <= TIMELINE_DAYS
-    anchors = [t for t in tasks if tl_ok(t) and not t.get("parent")]
-    # pin: true を最上位に固定（2026/08/16）。法令期限のように、期日が先でも
-    # 常に目に入っていないと困る手続きのため。それ以外は従来どおり期日順。
-    anchors.sort(key=lambda t: (t.get("pin") != "true", t.get("due") or "9999"))
+    anchors = B.anchors
     timelines = "".join(timeline_svg(a, children[a["id"]]) for a in anchors)
 
     # ---- 団体別ボード ----
@@ -539,34 +365,18 @@ def main(root, today_s, out_path, fixed_path=None):
     over_light = len(tw_light) > LIGHT_LIMIT
     org_cards = "".join(org_section(o) for o in ORG_COLORS if o in orgs_tasks)
     undated_note = ""
-    if undated:
-        items = "、".join(esc((t.get("src_no") or t["id"]) + " " + t["title"] + f"（〜{t.get('due','')}）") for t in undated)
+    if B.undated:
+        items = "、".join(esc((t.get("src_no") or t["id"]) + " " + t["title"] + f"（〜{t.get('due','')}）") for t in B.undated)
         undated_note = f'<p class="note">日付未定の拘束（枠だけ確保）: {items}</p>'
 
-    # ---- 重複排除（2026/08/15 増野さん決定）----
-    # 1つのタスクは「至急」から「監視の期日」までのうち、上から最初に該当した1節にだけ出す。
-    # 同じタスクが上部に何度も現れると、今日やる量が実際より多く見えるため。
-    # 対象外：「2週間ある」（カレンダー＝事実の枠。日付が抜けると誤読される）と、
-    #         「タイムライン」「団体別ボード」（全体を俯瞰する場所なので重複してよい）。
-    shown_ids = set()
-    def uniq(lst):
-        out = []
-        for t in lst:
-            if t["id"] in shown_ids: continue
-            shown_ids.add(t["id"]); out.append(t)
-        return out
+    # 重複排除済みの節（v_*）は boardlib.compute で確定している（2026/08/15 増野さん決定の仕様）
     def omitted(shown, total):
         n = len(total) - len(shown)
         return f'<span class="note">（＋上の節に{n}件）</span>' if n else ""
-    v_urgent   = uniq(urgent)
-    v_today    = uniq(today_plan)
-    v_waiting  = uniq(waiting_list)   # 「待ち」は毎朝まずチェックするため今日やるつもりの直下（2026/08/16）
-    v_wait_imp = [t for t in v_waiting if wait_is_important(t)]
-    v_wait_lgt = [t for t in v_waiting if not wait_is_important(t)]
-    v_tw_heavy = uniq(tw_heavy)
-    v_tw_light = uniq(tw_light)
-    v_alerts   = {k: uniq(alerts[k]) for k in ("overdue", "d3", "d14")}
-    v_mon_due  = uniq(mon_due)
+    v_urgent, v_today = B.v_urgent, B.v_today
+    v_waiting, v_wait_imp, v_wait_lgt = B.v_waiting, B.v_wait_imp, B.v_wait_lgt
+    v_tw_heavy, v_tw_light = B.v_tw_heavy, B.v_tw_light
+    v_alerts, v_mon_due = B.v_alerts, B.v_mon_due
 
     page = f"""<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -694,16 +504,16 @@ ul.dim li {{ opacity:0.5; }}
 {('<h2>🚨 至急 — 今日やる</h2><div class="urgentbox"><ul>'
   + "".join(row(t, True, expand=False) for t in v_urgent) + '</ul></div>') if v_urgent else ''}
 
-{h2(f'🎯 今日やるつもり — {len(v_today)}件', 
+{h2(f'🎯 今日やるつもり — {len(v_today)}件',
     'タスクノートに today: 今日の日付 を書いたもの。「至急（やらねばならない）」とは別の、'
     '自分で決めた今日の枠。🚧は仕掛かり中（status: doing）。翌日には自動で外れる。'
-    '至急に出したものはここには出さない。') + omitted(v_today, today_plan)}
+    '至急に出したものはここには出さない。') + omitted(v_today, B.today_plan)}
 {'<div class="todaybox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_today) + '</ul></div>' if v_today else '<p class="note">上の節に出していない、今日やるつもりのタスクはありません。</p>'}
 
 {h2(f'👥 待ち（相手の作業・納品）— {len(v_waiting)}件',
     '自分では動かせないタスク。毎朝ここを見て、動いたものが無いか確かめる。'
     '重要＝いま気にすべきもの／軽度＝まだ寝かせてよいもの（期限の1週間前を切ると重要へ移る）。')
- + omitted(v_waiting, waiting_list)}
+ + omitted(v_waiting, B.waiting_list)}
 {'<p class="sub">重要</p><div class="waitbox"><ul>' + "".join(row(t, True, expand=False, show_parent=True) for t in v_wait_imp) + '</ul></div>' if v_wait_imp else ''}
 {'<p class="sub">軽度</p><ul class="dim">' + "".join(row(t, True, expand=False, show_parent=True) for t in v_wait_lgt) + '</ul>' if v_wait_lgt else ''}
 {'<p class="note">待ちのタスクはありません。</p>' if not v_waiting else ''}
@@ -713,7 +523,7 @@ ul.dim li {{ opacity:0.5; }}
     '期限の無いものは status: this_week で手動指定。7枚は上限ではなく、超えたら期限を見直す合図。'
     '拘束（timebound）は「2週間ある」、他人の担当と日次見回りは「監視の期日」で見る。')}
 {f'<div class="warn">重タスクが{len(tw_heavy)}枚（目安{THIS_WEEK_LIMIT}枚）。<b>期限を見直すきっかけです。</b>動かせる期日を先へ、相手に振れるものは owner へ。</div>' if over_limit else ''}
-{"".join(f'<div class="warn">⚠ 逆算期日が過ぎています: {esc(t["id"])} {esc(t["title"])}（期日{t["due"]}）。親の日付を動かすか、準備を削るかを決めてください。</div>' for t in lead_broken)}
+{"".join(f'<div class="warn">⚠ 逆算期日が過ぎています: {esc(t["id"])} {esc(t["title"])}（期日{t["due"]}）。親の日付を動かすか、準備を削るかを決めてください。</div>' for t in B.lead_broken)}
 <ul>{"".join(row(t, True, show_parent=True) for t in v_tw_heavy)}</ul>{omitted(v_tw_heavy, tw_heavy)}
 
 {h2(f'🔹 これから1週間でやる — 軽（{len(tw_light)}/{LIGHT_LIMIT}）',
@@ -744,7 +554,7 @@ ul.dim li {{ opacity:0.5; }}
 </div></body></html>"""
     open(out_path, "w", encoding="utf-8").write(page)
     print(f"tasks={len(tasks)} thisweek={len(tw_heavy)}重+{len(tw_light)}軽 timelines={len(anchors)} "
-          f"alerts={sum(len(v) for v in alerts.values())}")
+          f"alerts={sum(len(v) for v in B.alerts.values())}")
 
 if __name__ == "__main__":
     main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) > 4 else None)
