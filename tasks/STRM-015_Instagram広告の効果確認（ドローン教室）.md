@@ -3,7 +3,7 @@ id: STRM-015
 org: STREAM
 title: Instagram広告の効果確認（ドローン教室）
 short: 広告効果確認
-status: doing
+status: done
 size: light
 role: do
 due: 2026/08/19
@@ -13,7 +13,7 @@ owner:
 parent: STRM-005
 project: 20260822_ドローン教室
 created: 2026/08/15
-done_date: 
+done_date: 2026/08/19
 ---
 
 # STRM-015 Instagram広告の効果確認（ドローン教室）
@@ -38,3 +38,5 @@ STRM-005 で出稿した Instagram 広告（予算¥4,000・期間4日間）の�
   **宣伝材料の写真を撮影**して、第2回（9/5）以降の宣伝に活かす。
   → この方針転換の可否判断は STRM-017 へ切り出した。
   本タスク（広告の数値確認）は 8/19 期日のまま、実績の記録として続ける。
+- 2026/08/20 増野さん報告により **昨日（8/19）確認完了**。**一般集客は無し**（知人のみ）。
+  done_date を 8/19 に設定。方針転換の検討は STRM-017 で継続。
