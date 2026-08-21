@@ -3,7 +3,7 @@ id: GONO-011
 org: 郷野の郷
 title: 確定決算に対する監事監査
 short: 確定決算の監事監査
-status: todo
+status: done
 role: monitor
 due: 2026/08/21
 after: GONO-009
@@ -16,7 +16,7 @@ src_no: A-11
 parent: GONO-006
 project: 20260721_第3期アクションマトリクス
 created: 2026/08/05
-done_date: 
+done_date: 2026/08/21
 check_cycle: monthly
 next_check: 2026/08/19
 ---
@@ -34,3 +34,4 @@ next_check: 2026/08/19
   前提として前倒しする流れの一部。next_check も 9/1 → **8/19**（AI設定：8/21の2日前。
   期限に間に合うよう中田監事へ確認する日を早めた）。
 - 2026/08/16 parent を GONO-006 に設定（同上）。前提は GONO-009（確定決算の受領）。
+- 2026/08/22 増野さん報告により **昨日（8/21）完了**。中田監事による監査終了。done_date を 8/21 に設定。
