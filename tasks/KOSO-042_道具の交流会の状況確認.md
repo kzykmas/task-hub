@@ -6,12 +6,12 @@ short: 道具の交流会の確認
 status: todo
 size: light
 role: monitor
-due: 2026/08/19
+due: 2026/08/29
 reason: 年間計画の確定待ち
 later: 
 owner: 
 check_cycle: weekly
-next_check: 2026/08/19
+next_check: 2026/08/29
 project: 
 created: 2026/08/13
 done_date: 
@@ -36,3 +36,5 @@ KOSO-010（年間スケジュールの確定）はこの結果を待って確定
 - 2026/08/13 増野さん指示で起票。KOSO-010（年間スケジュール確定）を 8/16 → 8/31 に延期した
   理由がこの状況確認待ちのため、**監視タスクとして 8/19 までに確認**する形で切り出した。
   ⚠ owner（誰に確認するか）が未記入。相手が決まったら owner と asked を記入する。
+- 2026/08/22 **本日の確認は終了**（増野さん報告）。1週間後の 8/29 に再度状況確認するため、
+  due・next_check を 8/29 に更新。

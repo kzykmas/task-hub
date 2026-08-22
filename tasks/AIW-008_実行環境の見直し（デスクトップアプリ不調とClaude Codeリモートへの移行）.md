@@ -5,7 +5,7 @@ title: 実行環境の見直し（デスクトップアプリ不調とClaude Cod
 short: 実行環境の見直し
 status: todo
 role: do
-due: 2026/08/23
+due: 2026/09/04
 reason: 
 later: 
 owner: 
@@ -86,3 +86,4 @@ Vaultの `tasks/` をGitHub privateに置けば、Claude Code on the web から
 - 2026/08/11 **AIW-009（AI仕事環境のグランドデザイン見直し）の細目**に位置づけ（parent設定）。
 - 2026/08/11 増野さんの問い（事務所の常駐Claude Code環境は不要になるか）を受けて検討。
   **実行環境としては不要**。ただし端末としての用途は残る、と整理。
+- 2026/08/22 増野さん指示で **期限を 8/23 → 2026/09/04 に変更**。
